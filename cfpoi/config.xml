@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!-- 
+	Path placeholders:
+		{railo-web}: path to the railo web directory typical "{web-root}/WEB-INF/railo"
+		{railo-server}: path to the railo server directory typical where the railo.jar is located
+		{temp-directory}: path to the temp directory of the current user of the system
+		{home-directory}: path to the home directory of the current user of the system
+		{web-root-directory}: path to the web root
+		{system-directory}: path to thesystem directory
+
+-->
+<config>
+	<!--
+	<info>
+		<id>10EEC23A-0779-4068-9507A9C5ED4A8641</id>
+		<version>r33</version>
+		<name>CFPOI</name>
+		<type>server</type>
+		<label>CFPOI, a wrapper for the Apache POI Project.</label>
+		<description>CFPOI, a wrapper for the Apache POI Project Description</description>
+		<created>2010-December-22 00:28</created>
+		<author>Ext by Andy Jarrett.<br/> CFPOI by Matt Woodward</author>
+		<category>Application</category>
+		<documentation>http://code.google.com/p/cfpoi/w/list</documentation> 
+		<image>http://www.gstatic.com/codesite/ph/images/defaultlogo.png</image>
+	</info>
+	-->
+</config>
+
