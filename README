@@ -1,0 +1,7 @@
+This is a fork of http://code.google.com/p/cfpoi/ for Railo. 
+
+A massive thank you must go out to Matt Woodward (matt@mattwoodward.com/@mpwoodward) as he has done all the hard work for this project I am just forking it to make it workable with Railo as an extension.
+
+CFPOI is a set of CFML wrapper for the Apache POI Project. POI allows programmatic interaction with Microsoft Office and OpenOffice.org documents via Java, and CFPOI provides CFML-based access to the majority of POI functionality, including the ability to read, write, and interact with spreadsheet, presentation, and word processing documents.
+
+The CFML wrappers for POI consist of CFCs, user-defined functions (UDFs), and custom tags that allow various means and syntax styles for interacting with the various document types.
