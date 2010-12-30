@@ -3,6 +3,37 @@
 	output="false" 
 	hint="CFC wrapper for the Apache POI project's HSSF (xls) and XSSF (xlsx) classes">
 	
+	<cffunction name="loadPoi" access="private" output="false" returntype="any">
+		<cfargument name="javaclass" type="string" required="true" hint="I am the java class to be loaded" />
+		<cfargument name="javainit" type="string" required="false" hint="I am the java initilising parameters" />
+		<cfscript>
+			//create the loader
+			local.paths = arrayNew(1);
+			// This points to the jar we want to load. Could also load a directory of .class files
+			local.paths[1] = expandPath('{railo-web-directory}'&'/lib/poi-3.7-20101029.jar');
+			local.paths[2] = expandPath('{railo-web-directory}'&'/lib/poi-ooxml-3.7-20101029.jar');
+			local.paths[3] = expandPath('{railo-web-directory}'&'/lib/poi-ooxml-schemas-3.7-20101029.jar');		
+		
+			if( NOT structKeyExists( server, "_poiLoader")){
+				server._poiLoader = createObject("component", "javaloader.JavaLoader").init(loadPaths = local.paths,trustedSource = true);
+			}
+			//at this stage we only have access to the class, but we don't have an instance
+			var classInstance = server._poiLoader.create( arguments.javaclass);
+			/*
+			Create the instance, just like me would in createObject("java", "HelloWorld").init()
+			This also could have been done in one line - loader.create("HelloWorld").init();
+			*/
+			if(structKeyExists(arguments, "javainit")){
+				var jclass = classInstance.init( arguments.javainit );						
+			} else{
+				var jclass = classInstance.init();		
+			}
+			
+		</cfscript>		
+		<cfreturn jclass />
+	</cffunction>	
+	
+	
 	<!--- CONSTRUCTOR --->
 	<cffunction name="init" access="public" output="false" returntype="Spreadsheet">
 		<!--- if init is called, assume it's because they want a new workbook with a blank sheet ---->
@@ -95,7 +126,7 @@
 					
 					<cfset returnVal = html />
 				</cfcase>
-				
+
 				<cfcase value="query">
 					<!--- If a header row is specified, use that for the query column names.
 							Otherwise, use COL_1, COL_2, etc. for column names. --->
@@ -104,43 +135,50 @@
 					<cfelse>
 						<cfset row = getActiveSheet().getRow(0) />
 					</cfif>
-					
-					<cfset cellIterator = row.cellIterator() />
 
-					<cfset i = 1 />
+					<!--- If the sheet is empty the row == null and we have value to iterate over--->
 					
-					<cfloop condition="#cellIterator.hasNext()#">
-						<cfset queryColumnName = getCellValue(row.getRowNum() + 1, cellIterator.next().getColumnIndex() + 1) />
-						
-						<cfif not StructKeyExists(arguments, "headerrow")>
-							<cfset queryColumnName = "COL_" & i />
-						</cfif>
-						
-						<cfset queryColumnNames = queryColumnNames & queryColumnName & "," />
-						
-						<cfset i = i + 1 />
-					</cfloop>
+					<cfif NOT isNull( getActiveSheet().getRow(0) )>
 					
-					<cfset queryColumnNames = Left(queryColumnNames, Len(queryColumnNames) - 1) />
-					
-					<cfset query = QueryNew(queryColumnNames) />
-					
-					<cfset i = 1 />
-					
-					<cfloop condition="#rowIterator.hasNext()#">
-						<cfset QueryAddRow(query, 1) />
-						
-						<cfset row = rowIterator.next() />
 						<cfset cellIterator = row.cellIterator() />
-						
+
+						<cfset i = 1 />
+					
 						<cfloop condition="#cellIterator.hasNext()#">
-							<cfset QuerySetCell(query, ListGetAt(queryColumnNames, i), getCellValue(row.getRowNum() + 1, cellIterator.next().getColumnIndex() + 1)) />
+							<cfset queryColumnName = getCellValue(row.getRowNum() + 1, cellIterator.next().getColumnIndex() + 1) />
+							
+							<cfif not StructKeyExists(arguments, "headerrow")>
+								<cfset queryColumnName = "COL_" & i />
+							</cfif>
+							
+							<cfset queryColumnNames = queryColumnNames & queryColumnName & "," />
 							
 							<cfset i = i + 1 />
 						</cfloop>
+					
+						<cfset queryColumnNames = Left(queryColumnNames, Len(queryColumnNames) - 1) />
+						
+						<cfset query = QueryNew(queryColumnNames) />
 						
 						<cfset i = 1 />
-					</cfloop>
+					
+						<cfloop condition="#rowIterator.hasNext()#">
+							<cfset QueryAddRow(query, 1) />
+							
+							<cfset row = rowIterator.next() />
+							<cfset cellIterator = row.cellIterator() />
+							
+							<cfloop condition="#cellIterator.hasNext()#">
+								<cfset QuerySetCell(query, ListGetAt(queryColumnNames, i), getCellValue(row.getRowNum() + 1, cellIterator.next().getColumnIndex() + 1)) />
+								
+								<cfset i = i + 1 />
+							</cfloop>
+							
+							<cfset i = 1 />
+						</cfloop>
+					<cfelse>
+						<cfset query = queryNew("")/>
+					</cfif>
 					
 					<cfset returnVal = query />
 				</cfcase>
@@ -181,8 +219,11 @@
 						message="Invalid Argument Combination" 
 						detail="Both 'query' and 'format' may not be provided." />
 		</cfif>
+
+		<cfdump var="#arguments#">
 		
 		<cfif StructKeyExists(arguments, "sheetname")>
+
 			<cfif arguments.isUpdate and getWorkbook().getSheet(JavaCast("string", arguments.sheetname)) neq "">
 				<cfset getWorkbook().removeSheetAt(JavaCast("int", getWorkbook().getSheetIndex(JavaCast("string", arguments.sheetname)))) />
 			</cfif>
@@ -275,7 +316,6 @@
 
 		<cfset arguments.workbookToUpdate = read(arguments.filepath).getWorkbook() />
 		<cfset arguments.overwrite = true />
-		
 		<cfset write(argumentcollection = arguments) />
 	</cffunction>
 	
@@ -892,12 +932,20 @@
 		<cfif StructKeyExists(arguments, "column")>
 			<cfset cellNum = arguments.column - 1 />
 		</cfif>
-		
+
+
 		<cfloop list="#arguments.data#" index="cellValue" delimiters="#arguments.delimiter#">
 			<!--- if rowNum is greater than the last row of the sheet, need 
 					to create a new row --->
-			<cfif rowNum gt getActiveSheet().getLastRowNum() or getActiveSheet().getRow(rowNum) eq "">
+				
+			<!---
+				REMOVED as second part of logic is not simple value 
+				<cfif rowNum GT getActiveSheet().getLastRowNum() OR getActiveSheet().getRow(rowNum) EQ "">
+			--->
+			<cfif rowNum GT getActiveSheet().getLastRowNum() OR isNull(getActiveSheet().getRow(rowNum).getCell(1))>
+
 				<cfset row = createRow(rowNum) />
+
 			<cfelse>
 				<cfset row = getActiveSheet().getRow(rowNum) />
 			</cfif>
@@ -909,13 +957,13 @@
 						cells are impacted, and shift the impacted cells to the right to make 
 						room for the new data --->
 				<cfset lastCellNum = row.getLastCellNum() + 1 />
-				
+
 				<cfloop index="i" from="#lastCellNum#" to="#cellNum + 1#" step="-1">
 					<cfset tempCell = row.getCell(JavaCast("int", i - 1)) />
 					
 					<!--- getLastCellNum() apparently returns the max cell number in ANY row (?), 
 							so we need to check if this is null --->
-					<cfif tempCell neq "">
+					<cfif isDefined( "tempCell" ) AND tempCell.toString() neq "">
 						<cfset temp = tempCell.getStringCellValue() />
 						<cfset cell = createCell(row, i) />
 						<cfset cell.setCellValue(JavaCast("string", temp)) />
@@ -1540,7 +1588,9 @@
 		<cfargument name="sheetname" type="string" required="false" hint="Used to set the active sheet" />
 		
 		<cfset var inputStream = CreateObject("java", "java.io.FileInputStream").init(arguments.src) />
-		<cfset var workbookFactory = CreateObject("java", "org.apache.poi.ss.usermodel.WorkbookFactory").init() />
+		<!--- <cfset var workbookFactory = CreateObject("java", "org.apache.poi.ss.usermodel.WorkbookFactory").init() /> --->
+		<cfset var workbookFactory = loadPoi("org.apache.poi.ss.usermodel.WorkbookFactory") />
+
 		<cfset var workbook = workbookFactory.create(inputStream) />
 		
 		<cfif StructKeyExists(arguments, "sheet") and StructKeyExists(arguments, "sheetname")>

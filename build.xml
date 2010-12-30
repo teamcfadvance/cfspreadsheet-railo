@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="cfpoi" default="zip" basedir=".">
+	<property name="project-name" value="${ant.project.name}" />
+	
+	<property name="tmp.dir" value="tmp" />
+	<!-- CFPOI properties -->
+	<property name="cfpoiComponent" value="cfpoi" />
+	<property name="tags" value="tags" />
+	<property name="functions" value="functions" />
+	<property name="poiLib" value="poi-3.7" />
+
+	<target name="clean">
+		<delete file="${project-name}.zip" />
+		<antcall target="cleanZips" />
+	</target>
+
+	<target name="zip">
+		<echo message="zipping up the project folders"/>
+		<zip destfile="${project-name}/cfpoi.zip" basedir="${project-name}/${cfpoiComponent}" excludes=".DS_Store" />
+		<zip destfile="${project-name}/tags.zip" basedir="${project-name}/${tags}" excludes=".DS_Store" />
+		<zip destfile="${project-name}/functions.zip" basedir="${project-name}/${functions}" excludes=".DS_Store" />
+		<zip destfile="${project-name}/poiLib.zip" basedir="${project-name}/${poiLib}" excludes=".DS_Store" />
+		
+		<echo message="Putting the project zips into a master zip file"/>
+        <zip destfile="${project-name}.zip">
+        	<fileset dir="${project-name}/" includes="*.zip"/>
+        </zip>	
+		
+		<!-- Clean up-->
+		<echo message="cleaning up"/>
+		<antcall target="cleanZips" />
+		
+	</target>
+	
+	<target name="cleanZips">
+		<delete>
+			<fileset dir="${project-name}/" includes="*.zip"/>
+		</delete>
+	</target>	
+
+</project>

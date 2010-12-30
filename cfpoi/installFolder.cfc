@@ -42,7 +42,7 @@
 	        <cfzip
 	            action = "unzip"
 	            destination = "#serverPath#/lib"
-	            file = "#path#poi-3.7.zip"
+	            file = "#path#poiLib.zip"
 	            overwrite = "yes"
 	            recurse = "yes"
 	            storePath = "false"/>
