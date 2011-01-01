@@ -1,11 +1,16 @@
 <cfspreadsheet> for Railo
 
-This is a fork of http://code.google.com/p/cfpoi/ for Railo so a massive thank you must go out to
-Matt Woodward (www.mattwoodward.com / @mpwoodward) as he has done all the hard work for this project
-I am just forking it to make it workable with Railo as an extension. 
+This is a fork of http://code.google.com/p/cfpoi/ for Railo so a massive thank you must go out to Matt Woodward (www.mattwoodward.com / @mpwoodward) as he has done all the hard work for this project I am just forking it to make it workable with Railo as an extension.
 
-At the moment this should be considered alpha/beta as it needs some full testing to be done. It is
-currently working for my limited needs but it required feedback to perfect.
+At the moment this should be considered alpha/beta as it needs some full testing to be done. It is currently working for my limited needs but it requires feedback before being considered as stable.
 
-View Source: https://github.com/andyj/RailoExtensionProvider
+To install
+
+log in to your Web Administrator and add http://www.andyjarrett.co.uk/RailoExtensionProvider/ExtensionProvider.cfc to your Providers (under Extension)
+Then go to Applications (still under Extension) and install "CFPOI, a wrapper for the Apache POI Project."
+Once done you will need to restart your Railo server.
+With your server restarted you should be able to use the cfspreadsheet functions and tags. 
+
+All the code os open source so to have a look around or log issues please check out the following links: 
+Source: https://github.com/andyj/RailoExtensionProvider
 Report issues: https://github.com/andyj/RailoExtensionProvider/issues

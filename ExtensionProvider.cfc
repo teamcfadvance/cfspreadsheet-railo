@@ -31,7 +31,7 @@ component displayname="extension provider" output="false" {
 		QuerySetCell(apps,'support','http://code.google.com/p/cfpoi/issues/list');
 		QuerySetCell(apps,'documentation','http://code.google.com/p/cfpoi/w/list');
 		QuerySetCell(apps,'created',CreateDate(2009,2,24));
-		QuerySetCell(apps,'version',"v#timeFormat( now(), "hhmm")#");
+		QuerySetCell(apps,'version',"v25");
 		QuerySetCell(apps,'category',"Application");
 		QuerySetCell(apps,'download','#instance.thisAddress#/cfpoi.zip');
 		return apps;			
