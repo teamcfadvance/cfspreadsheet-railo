@@ -1,7 +1,7 @@
 component displayname="extension provider" output="false" {
 	
 	instance = {
-		thisAddress = "http://#cgi.SERVER_NAME#:#cgi.SERVER_PORT#/ext/"
+		thisAddress = "http://#cgi.SERVER_NAME#:#cgi.SERVER_PORT#/RailoExtensionProvider/"
 	};
 	
 	

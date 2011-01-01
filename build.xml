@@ -4,7 +4,7 @@
 	
 	<property name="tmp.dir" value="tmp" />
 	<!-- CFPOI properties -->
-	<property name="cfpoiComponent" value="cfpoi" />
+	<property name="cfpoiComponent" value="org" />
 	<property name="tags" value="tags" />
 	<property name="functions" value="functions" />
 	<property name="poiLib" value="poi-3.7" />
@@ -23,7 +23,7 @@
 		
 		<echo message="Putting the project zips into a master zip file"/>
         <zip destfile="${project-name}.zip">
-        	<fileset dir="${project-name}/" includes="*.zip"/>
+        	<fileset dir="${project-name}/" includes="*.zip,*.cfc,*.xml" excludes=".DS_Store"/>
         </zip>	
 		
 		<!-- Clean up-->

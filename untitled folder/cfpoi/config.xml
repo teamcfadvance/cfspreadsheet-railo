@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!-- 
+	Path placeholders:
+		{railo-web}: path to the railo web directory typical "{web-root}/WEB-INF/railo"
+		{railo-server}: path to the railo server directory typical where the railo.jar is located
+		{temp-directory}: path to the temp directory of the current user of the system
+		{home-directory}: path to the home directory of the current user of the system
+		{web-root-directory}: path to the web root
+		{system-directory}: path to thesystem directory
+
+-->
+<config>
+</config>
+
