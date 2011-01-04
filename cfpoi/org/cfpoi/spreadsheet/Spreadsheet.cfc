@@ -221,7 +221,10 @@
 						message="Invalid Argument Combination" 
 						detail="Both 'query' and 'format' may not be provided." />
 		</cfif>
-
+		
+		<!--- <cfdump var="#arguments#"/>
+		<cfabort> --->
+		
 		<cfif StructKeyExists(arguments, "sheetname")>
 
 			<cfif arguments.isUpdate and getWorkbook().getSheet(JavaCast("string", arguments.sheetname)) neq "">
@@ -242,12 +245,19 @@
 
 			<cfset sheetToWrite = getWorkbook().createSheet(JavaCast("string", "Sheet" & arguments.sheet)) />
 		<cfelse>
+		
 			<cfif getWorkbook().getNumberOfSheets() eq 0 
-					or getWorkbook().getSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)) eq "" 
-					or getWorkbook().getSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)).getPhysicalNumberOfRows() eq 0>
-				<cfif getWorkbook().getSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)) neq "">
+				or getWorkbook().getSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)).getPhysicalNumberOfRows() eq 0>
+				
+				<!--- getSheetAt() does not bring back a simple value	
+					<cfif getWorkbook().getSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)) neq "">
+						<cfset getWorkbook().removeSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)) />
+					</cfif>
+				--->
+				
+				<cfif getWorkbook().getSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)).getPhysicalNumberOfRows() EQ 0>
 					<cfset getWorkbook().removeSheetAt(JavaCast("int", getWorkbook().getNumberOfSheets() - 1)) />
-				</cfif>
+				</cfif>				
 				
 				<cfset sheetToWrite = getWorkbook().createSheet(JavaCast("string", "Sheet" & getWorkbook().getNumberOfSheets() + 1)) />
 			<cfelse>
@@ -584,6 +594,7 @@
 				<cfset summaryInfo = getWorkbook().getSummaryInformation() />
 			</cfcatch>
 		</cftry>
+		
 		
 		<cfloop collection="#props#" item="prop">
 			<cfswitch expression="#prop#">
