@@ -222,8 +222,6 @@
 						detail="Both 'query' and 'format' may not be provided." />
 		</cfif>
 
-		<cfdump var="#arguments#">
-		
 		<cfif StructKeyExists(arguments, "sheetname")>
 
 			<cfif arguments.isUpdate and getWorkbook().getSheet(JavaCast("string", arguments.sheetname)) neq "">
@@ -586,9 +584,6 @@
 				<cfset summaryInfo = getWorkbook().getSummaryInformation() />
 			</cfcatch>
 		</cftry>
-		
-		<cfdump var="#documentSummaryInfo#" />
-		<cfabort />
 		
 		<cfloop collection="#props#" item="prop">
 			<cfswitch expression="#prop#">
