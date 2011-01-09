@@ -97,7 +97,8 @@
 					</cfif>
 				<cfelseif attributeExists("query")>
 					<cfset args = StructCopy(attributes) />
-					<cfset args.query = caller[attributes.query] />
+					<!--- <cfset args.query = caller[attributes.query] /> --->
+					<cfset args.query = attributes.query />					
 					<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init() />
 					<cfset spreadsheet.write(argumentcollection = args) />
 				</cfif>
