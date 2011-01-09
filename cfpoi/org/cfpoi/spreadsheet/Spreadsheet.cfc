@@ -1127,7 +1127,7 @@
 		
 		<cfset var cell = getActiveSheet().getRow(JavaCast("int", arguments.row - 1)).getCell(JavaCast("int", arguments.column - 1)) />
 		
-		<cfif cell neq "">
+		<cfif cell.toString() neq "">
 			<cfset cell.setCellStyle(buildCellStyle(arguments.format)) />
 		</cfif>
 	</cffunction>
