@@ -950,7 +950,7 @@
 				REMOVED as second part of logic is not simple value 
 				<cfif rowNum GT getActiveSheet().getLastRowNum() OR getActiveSheet().getRow(rowNum) EQ "">
 			--->
-			<cfif rowNum GT getActiveSheet().getLastRowNum() OR isNull(getActiveSheet().getRow(rowNum).getCell(1))>
+			<cfif rowNum GT getActiveSheet().getLastRowNum() OR isNull(getActiveSheet().getRow(rowNum))>
 
 				<cfset row = createRow(rowNum) />
 
