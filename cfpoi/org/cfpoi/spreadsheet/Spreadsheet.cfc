@@ -40,7 +40,7 @@
 	<cffunction name="init" access="public" output="false" returntype="Spreadsheet">
 		<!--- if init is called, assume it's because they want a new workbook with a blank sheet ---->
 		<cfset var workbook = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFWorkbook").init() />
-		
+				
 		<cfset workbook.createSheet(JavaCast("string", "Sheet1")) />
 		<cfset setWorkbook(workbook) />
 		<cfset setActiveSheet("Sheet1") />
@@ -504,7 +504,7 @@
 			<cfset picture.resize() />
 		</cfif> --->
 	</cffunction>
-	
+
 	<cffunction name="getInfo" access="public" output="false" returntype="struct" 
 			hint="Returns a struct containing the standard properties for the workbook">
 		<!--- 
@@ -905,11 +905,11 @@
 	<cffunction name="addColumn" access="public" output="false" returntype="void" 
 			hint="Adds a column and inserts the data provided into the new column.">
 		<cfargument name="data" type="string" required="true" />
-		<cfargument name="delimiter" type="string" required="true" />
-		<cfargument name="column" type="numeric" required="false" />
 		<cfargument name="startRow" type="numeric" required="false" />
+		<cfargument name="column" type="numeric" required="false" />
 		<cfargument name="insert" type="boolean" required="false" default="true" 
 			hint="If false, will overwrite data in an existing column if one exists" />
+		<cfargument name="delimiter" type="string" required="true" />
 		
 		<cfset var row = 0 />
 		<cfset var cell = 0 />
@@ -920,7 +920,7 @@
 		<cfset var tempCell = 0 />
 		<cfset var temp = 0 />
 		<cfset var cellValue = 0 />
-		
+
 		<cfif StructKeyExists(arguments, "startRow") and arguments.startRow lte 0>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 						message="Invalid Start Row Value" 
@@ -2140,4 +2140,5 @@
 
 		<cfreturn colorRGB />
 	</cffunction>
+
 </cfcomponent>
