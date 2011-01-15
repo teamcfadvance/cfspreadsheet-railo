@@ -663,22 +663,13 @@
 	</cffunction>
 	
 	<cffunction name="readBinary" access="public" output="false" returntype="binary" 
-			hint="Writes the workbook to disk and returns a binary representation of the file">
-		<!--- The workbook class has a getBytes() method that returns the sheets (only!) as 
-				a byte array, but CF 9 returns a byte array of the entire file. From 
-				what I can gather, since the Workbook class isn't serializable we can't 
-				accomplish all of this in memory using a ByteArrayOutputStream and 
-				ObjectOutputStream. So we have to write the file to disk first, then 
-				do a CFFILE readbinary on it. I'm not sure if this is what CF 9 is doing 
-				under the hood but the end binary result matches. --->
-		<cfset var bytes = 0 />
-		<cfset var filename = CreateUUID() & ".tmp" />
+			hint="Returns a binary representation of the file">
 
-		<cfset writeToFile(ExpandPath(filename), getWorkbook()) />
-		<!--- <cffile action="readbinary" file="#ExpandPath(filename)#" variable="bytes" /> --->
-		<!--- <cffile action="delete" file="#ExpandPath(filename)#" /> --->
+		<cfset var baos = loadPOI("java.io.ByteArrayOutputStream").init() />
+		<cfset getWorkBook().write( baos ) />
+		<cfset baos.flush()>
 		
-		<cfreturn bytes />
+		<cfreturn baos.toByteArray() />
 	</cffunction>
 	
 	<cffunction name="setFooter" access="public" output="false" returntype="void" 
