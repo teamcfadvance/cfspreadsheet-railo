@@ -7,44 +7,63 @@
 		<cfargument name="javaclass" type="string" required="true" hint="I am the java class to be loaded" />
 		<cfargument name="javainit" type="string" required="false" hint="I am the java initilising parameters" />
 		<cfscript>
-			//create the loader
-			local.paths = arrayNew(1);
-			// This points to the jar we want to load. Could also load a directory of .class files
-			local.paths[1] = expandPath('{railo-web-directory}'&'/lib/poi-3.7-20101029.jar');
-			local.paths[2] = expandPath('{railo-web-directory}'&'/lib/poi-ooxml-3.7-20101029.jar');
-			local.paths[3] = expandPath('{railo-web-directory}'&'/lib/poi-ooxml-schemas-3.7-20101029.jar');		
-			local.paths[4] = expandPath('{railo-web-directory}'&'/lib/dom4j-1.6.1.jar');		
-			local.paths[5] = expandPath('{railo-web-directory}'&'/lib/geronimo-stax-api_1.0_spec-1.0.jar');		
-			local.paths[6] = expandPath('{railo-web-directory}'&'/lib/xmlbeans-2.3.0.jar');		
-		
 			if( NOT structKeyExists( server, "_poiLoader")){
-				server._poiLoader = createObject("component", "javaloader.JavaLoader").init(loadPaths = local.paths, trustedSource=true);
+				//create the loader
+				local.paths = arrayNew(1);
+				// This points to the jar we want to load. Could also load a directory of .class files
+				local.paths[1] = expandPath('{railo-web-directory}'&'/lib/poi-3.7-20101029.jar');
+				local.paths[2] = expandPath('{railo-web-directory}'&'/lib/poi-ooxml-3.7-20101029.jar');
+				local.paths[3] = expandPath('{railo-web-directory}'&'/lib/poi-ooxml-schemas-3.7-20101029.jar');		
+				local.paths[4] = expandPath('{railo-web-directory}'&'/lib/dom4j-1.6.1.jar');		
+				local.paths[5] = expandPath('{railo-web-directory}'&'/lib/geronimo-stax-api_1.0_spec-1.0.jar');		
+				local.paths[6] = expandPath('{railo-web-directory}'&'/lib/xmlbeans-2.3.0.jar');		
+		
+				if( NOT structKeyExists( server, "_poiLoader")){
+					server._poiLoader = createObject("component", "javaloader.JavaLoader").init(loadPaths = local.paths, trustedSource=true);
+				}	
 			}
+
 			//at this stage we only have access to the class, but we don't have an instance
-			var classInstance = server._poiLoader.create( arguments.javaclass);
-			/*
-			Create the instance, just like createObject("java", "HelloWorld").init();
-			*/
+			// It is up to the calling function to initialize the object
+			var jclass = server._poiLoader.create( arguments.javaclass);
+			/*  Some classes do not have a public constructor. So calling init()
+			    may generate an exception. To keep it simple, return the UN-intialized 
+			    object. Let the calling function handle initialization
 			if(structKeyExists(arguments, "javainit")){
 				var jclass = classInstance.init( arguments.javainit );						
 			} else{
 				var jclass = classInstance.init();		
 			}
-			
+			 */
 		</cfscript>		
 		<cfreturn jclass />
 	</cffunction>	
 	
 	
 	<!--- CONSTRUCTOR --->
-	<cffunction name="init" access="public" output="false" returntype="Spreadsheet">
-		<!--- if init is called, assume it's because they want a new workbook with a blank sheet ---->
-		<cfset var workbook = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFWorkbook").init() />
-				
-		<cfset workbook.createSheet(JavaCast("string", "Sheet1")) />
-		<cfset setWorkbook(workbook) />
-		<cfset setActiveSheet("Sheet1") />
+	<cffunction name="init" access="public" output="false" returntype="Spreadsheet"
+				Hint="Creates or loads a workbook from disk. Returns a new Spreadsheet object.">
+		<cfargument name="sheetName" type="string" default="Sheet1" Hint="Name of the initial Sheet -or- name of the Sheet to activate." />
+		<cfargument name="useXmlFormat" type="boolean" required="false" Hint="If true, creates an .xlsx workbook (ie XSSFWorkbook). Otherwise, creates a binary .xls object (ie HSSFWorkbook)" />
+		<cfargument name="src" type="string" required="false" Hint="Path to an existing workbook on disk" />
+		<cfargument name="sheet" type="numeric" required="false" Hint="Activate the sheet at this position. Applies only when using 'src'" />
 		
+		<cfif structKeyExists(arguments, "src") and structKeyExists(arguments, "useXmlFormat")>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Argument Combination" 
+						detail="Cannot specify both 'src' and 'useXmlFormat'. Argument 'useXmlFormat' only applies to new spreadsheets" />
+		</cfif>
+		
+		<!--- Load an existing workbook from disk ---->
+		<cfif structKeyExists(arguments, "src")>
+			<cfset setWorkbook( readFromFile(argumentCollection=arguments) ) />
+
+		<!--- create a new workbook with a blank sheet ---->
+		<cfelse>
+			<cfset setWorkbook( createWorkBook(argumentCollection=arguments) ) />
+			<cfset setActiveSheet( arguments.sheetName ) />
+		</cfif>
+
 		<cfreturn this />
 	</cffunction>
 	
@@ -401,7 +420,7 @@
 				error, so we'll create the anchor manually later. Just leaving this in here in case it's worth another 
 				look. --->
 		<!--- <cfset var creationHelper = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFCreationHelper") /> --->
-		<cfset var ioUtils = CreateObject("java", "org.apache.poi.util.IOUtils") />
+		<cfset var ioUtils = loadPoi("org.apache.poi.util.IOUtils") />
 		<cfset var inputStream = 0 />
 		<cfset var bytes = 0 />
 		<cfset var picture = 0 />
@@ -469,7 +488,7 @@
 
 		<cfset imageIndex = getWorkbook().addPicture(bytes, JavaCast("int", imgTypeIndex)) />
 
-		<cfset theAnchor = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFClientAnchor").init() />
+		<cfset theAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init() />
 
 		<cfif ListLen(arguments.anchor) eq 4>
 			<!--- list is in format startRow, startCol, endRow, endCol --->
@@ -505,6 +524,7 @@
 		</cfif> --->
 	</cffunction>
 
+	<!--- TODO: Add support for .xlsx format metadata --->
 	<cffunction name="getInfo" access="public" output="false" returntype="struct" 
 			hint="Returns a struct containing the standard properties for the workbook">
 		<!--- 
@@ -569,6 +589,7 @@
 		<cfreturn info />
 	</cffunction>
 	
+	<!--- TODO: Add support for .xlsx format metadata --->
 	<cffunction name="addInfo" access="public" output="false" returntype="void" 
 			hint="Set standard properties on the workbook">
 		<cfargument name="props" type="struct" required="true" 
@@ -693,6 +714,15 @@
 			<cfset getActiveSheet().getHeader().setRight(JavaCast("string", arguments.rightHeader)) />
 		</cfif>
 	</cffunction>
+	
+	<!--- GENERAL INFORMATION FUNCTIONS --->
+	<cffunction name="isBinaryFormat" access="public" output="false" returntype="boolean" 
+			hint="Returns true if this is a binary *.xls spreadsheet (ie instance of org.apache.poi.hssf.usermodel.HSSFWorkbook)">
+		<!---  Since the workbook is created with a separate class loader, isInstanceOf may not
+		       return the expected results. So we are using the class name as a simple/lazy alternative --->  
+		<cfreturn ( getWorkbook().getClass().getCanonicalName() eq "org.apache.poi.hssf.usermodel.HSSFWorkbook" ) />
+	</cffunction>
+
 	
 	<!--- TODO: implement an addPageNumbers() function to allow for addition of page numbers 
 				in header or footer (tons more stuff like this that could easily be added) --->
@@ -1204,6 +1234,7 @@
 				<cfset comments.row = arguments.row />
 			</cfif>
 		<cfelse>
+			<!--- TODO: Look into checking all sheets in the workbook --->
 			<!--- row and column weren't provided so loop over the whole shooting match and get all the comments --->
 			<cfset comments = ArrayNew(1) />
 			<cfset rowIterator = getActiveSheet().rowIterator() />
@@ -1260,7 +1291,7 @@
 		<cfset var drawingPatriarch = getActiveSheet().createDrawingPatriarch() />
 		<cfset var clientAnchor = 0 />
 		<cfset var commentObj = 0 />
-		<cfset var commentString = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFRichTextString").init(JavaCast("string", arguments.comment.comment)) />
+		<cfset var commentString = loadPoi("org.apache.poi.hssf.usermodel.HSSFRichTextString").init(JavaCast("string", arguments.comment.comment)) />
 		<cfset var font = 0 />
 		<cfset var javaColorRGB = 0 />
 		
@@ -1272,7 +1303,7 @@
 						detail="The cell on which a comment is attempting to be set does not exist." />
 		<cfelse>
 			<cfif StructKeyExists(arguments.comment, "anchor")>
-				<cfset clientAnchor = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
+				<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
@@ -1282,7 +1313,7 @@
 																													JavaCast("int", ListGetAt(arguments.comment.anchor, 4))) />
 			<cfelse>
 				<!--- if no anchor is provided, just use + 2 --->
-				<cfset clientAnchor = CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
+				<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
@@ -1514,7 +1545,7 @@
 		<cfargument name="endRow" type="numeric" required="true" />
 		<cfargument name="endColumn" type="numeric" required="true" />
 		
-		<cfset var cellRangeAddress = CreateObject("java", "org.apache.poi.ss.util.CellRangeAddress").init(JavaCast("int", arguments.startRow - 1), 
+		<cfset var cellRangeAddress = loadPoi("org.apache.poi.ss.util.CellRangeAddress").init(JavaCast("int", arguments.startRow - 1), 
 																											JavaCast("int", arguments.endRow - 1), 
 																											JavaCast("int", arguments.startColumn - 1), 
 																											JavaCast("int", arguments.endColumn - 1)) />
@@ -1559,6 +1590,15 @@
 	<cffunction name="setWorkbook" access="public" output="false" returntype="void">
 		<cfargument name="workbook" type="any" required="true" />
 		<cfset variables.workbook = arguments.workbook />
+		
+		<!--- Makes sure summary properties are initialized. This will prevent 
+			  errors when addInfo() or getInfo() is called on brand new workbooks.
+			  Since this method allows the workbook to be swapped, without going through init(),
+			  we're doing the intialization here to ensure it's *always* called   
+		 --->
+		<cfif isBinaryFormat()>
+			<cfset getWorkBook().createInformationProperties() />
+		</cfif>
 	</cffunction>
 	
 	<cffunction name="getWorkbook" access="public" output="false" returntype="any">
@@ -1588,25 +1628,97 @@
 	</cffunction>
 	
 	<!--- PRIVATE FUNCTIONS --->
+
+	<!--- Note: XML format is not fully supported yet  --->
+	<cffunction name="createWorkBook" access="public" output="false" returntype="any"
+				Hint="This function creates and returns a new POI Workbook with one blank Sheet">
+		<cfargument name="sheetName" type="string" default="Sheet1" Hint="Name of the initial Sheet. Default name is 'Sheet1'" />							
+		<cfargument name="useXMLFormat" type="boolean" default="false" Hint="If true, returns type XSSFWorkbook (xml). Otherwise, returns an HSSFWorkbook (binary)"/>							
+
+		<cfset var newWorkbook = "" />
+		<!--- Create an xml workbook ie *.xlsx --->
+		<cfif arguments.useXMLFormat>
+			<cfset newWorkBook = loadPOI("org.apache.poi.xssf.usermodel.XSSFWorkbook").init() />
+		<!--- Otherwise, create a binary ie *.xls workbook --->
+		<cfelse>
+			<cfset newWorkBook = loadPOI("org.apache.poi.hssf.usermodel.HSSFWorkbook").init() />
+		</cfif>
+		
+		<!--- Initialize our workbook with a blank Sheet --->
+		<cfset newWorkBook.createSheet( javacast("String", arguments.sheetName) ) />
+		
+		<cfreturn newWorkBook />
+	</cffunction>
+
+	<cffunction name="createSheet" access="public" output="false" returntype="void"
+				Hint="Adds a new WorkSheet to the current spreadsheet. Throws an error if the Sheet name already exists">
+		<cfargument name="sheetName" type="string" required="true" Hint="Name of the new sheet" />							
+		<cfargument name="sheet" type="numeric" required="false" Hint="Insert the new sheet at this position" />							
+		
+		<!--- Make sure the sheet name isn't in already in use --->		
+		<cfset var sheetPosition = getWorkBook().getSheetIndex( arguments.sheetName ) + 1 />
+		<cfif sheetPosition gt 0>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Sheet Name" 
+						detail="The Workbook already contains a sheet named [#arguments.sheetName#]" />
+		
+		</cfif>
+
+		<!--- Go ahead and create the new sheet --->
+		<cfset getWorkBook().createSheet( javaCast("String", arguments.sheetName) ) />
+
+		<!--- With existing workbooks, we may want to move the new sheet to a specific position --->
+		<cfif structKeyExists(arguments, "sheet")>
+			<cfset moveSheet( arguments.sheetName, arguments.sheet ) />
+		</cfif>
+	</cffunction>
+
+	<cffunction name="moveSheet" access="public" output="false" returntype="void"
+				Hint="Moves a Sheet Name to the given position">
+		<cfargument name="sheetName" type="string" required="true" Hint="Name of the sheet to move" />							
+		<cfargument name="sheet" type="numeric" required="true" Hint="Move the sheet to this position" />
+
+		<cfset var sheetCount  	= getWorkBook().getNumberOfSheets() />
+		<cfset var sheetIndex 	= arguments.sheet - 1 />
+		
+		<cfif getWorkBook().getSheetIndex( arguments.sheetName ) lt 0>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Sheet Name" 
+						detail="This workbook does not contain a sheet named [#arguments.sheetName#]" />
+		</cfif>
+
+		<!--- Make sure the sheet position isn't out of range --->
+		<cfif (sheetIndex lt 0) OR (sheetIndex gt sheetCount)>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Sheet Index (#arguments.sheet#)" 
+						detail="The index must be a whole number greater than 0 and cannot exceed the number of sheets in this workbook ie [#sheetCount#]" />
+		</cfif>
+
+
+		<cfset getWorkBook().setSheetOrder( javaCast("String", arguments.sheetName),
+											   javaCast("int", sheetIndex) ) />
+	</cffunction>
+		
 	<cffunction name="readFromFile" access="private" output="false" returntype="any" 
-			hint="Reads a workbook file from disk and returns a POI HSSFWorkbook object.">
+			hint="Reads a workbook file from disk and returns a POI HSSFWorkbook or XSSFWorkbook object.">
 		<!--- TODO: need to make sure this handles XSSF format; works with HSSF for now --->
 		<cfargument name="src" type="string" required="true" hint="The full file path to the spreadsheet" />
 		<cfargument name="sheet" type="numeric" required="false" hint="Used to set the active sheet" />
-		<cfargument name="sheetname" type="string" required="false" hint="Used to set the active sheet" />
+		<cfargument name="sheetName" type="string" required="false" hint="Used to set the active sheet" />
 		
-		<cfset var inputStream = CreateObject("java", "java.io.FileInputStream").init(arguments.src) />
-		<!--- <cfset var workbookFactory = CreateObject("java", "org.apache.poi.ss.usermodel.WorkbookFactory").init() /> --->
-		<cfset var workbookFactory = loadPoi("org.apache.poi.ss.usermodel.WorkbookFactory") />
-
-		<cfset var workbook = workbookFactory.create(inputStream) />
-		
+		<!--- Fail fast --->
 		<cfif StructKeyExists(arguments, "sheet") and StructKeyExists(arguments, "sheetname")>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 					message="Cannot Provide Both Sheet and SheetName Attributes" 
 					detail="Only one of either 'sheet' or 'sheetname' attributes may be provided.">
 		</cfif>
 		
+		<cfset var inputStream = CreateObject("java", "java.io.FileInputStream").init(arguments.src) />
+		<!--- <cfset var workbookFactory = CreateObject("java", "org.apache.poi.ss.usermodel.WorkbookFactory").init() /> --->
+		<cfset var workbookFactory = loadPoi("org.apache.poi.ss.usermodel.WorkbookFactory") />
+
+		<cfset var workbook = workbookFactory.create(inputStream) />
+
 		<cfset inputStream.close() />
 		
 		<cfif StructKeyExists(arguments, "sheet")>
@@ -1614,6 +1726,7 @@
 		<cfelseif StructKeyExists(arguments, "sheetname")>
 			<cfset workbook.setActiveSheet(JavaCast("int", workbook.getSheetIndex(JavaCast("string", arguments.sheetname)))) />
 		<cfelse>
+			<!--- TODO: Should probably anticipate workbooks that have no sheets --->
 			<cfset workbook.setActiveSheet(JavaCast("int", 0)) />
 		</cfif>
 		
@@ -1739,7 +1852,7 @@
 							doesn't seem to have any effect on the cell. Could be that I'm testing 
 							with OpenOffice so I'll have to check things in MS Excel --->
 				<cfcase value="dataformat">
-					<cfset cellStyle.setDataFormat(CreateObject("java", "org.apache.poi.hssf.usermodel.HSSFDataFormat").getBuiltinFormat(JavaCast("string", StructFind(arguments.format, setting)))) />
+					<cfset cellStyle.setDataFormat(loadPoi("org.apache.poi.hssf.usermodel.HSSFDataFormat").getBuiltinFormat(JavaCast("string", StructFind(arguments.format, setting)))) />
 				</cfcase>
 
 				<cfcase value="fgcolor">
@@ -1866,195 +1979,195 @@
 				And yes, each individual color is implemented as a nested class in HSSFColor. Joy. --->
 		<cfswitch expression="#UCase(arguments.colorName)#">
 			<cfcase value="AQUA">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$AQUA").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$AQUA").index />
 			</cfcase>
 			
 			<cfcase value="AUTOMATIC">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$AUTOMATIC").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$AUTOMATIC").index />
 			</cfcase>
 			
 			<cfcase value="BLACK">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$BLACK").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BLACK").index />
 			</cfcase>
 			
 			<cfcase value="BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BLUE").index />
 			</cfcase>
 			
 			<cfcase value="BLUE_GREY">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$BLUE_GREY").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BLUE_GREY").index />
 			</cfcase>
 			
 			<cfcase value="BRIGHT_GREEN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$BRIGHT_GREEN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BRIGHT_GREEN").index />
 			</cfcase>
 			
 			<cfcase value="BROWN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$BROWN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BROWN").index />
 			</cfcase>
 			
 			<cfcase value="CORAL">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$CORAL").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$CORAL").index />
 			</cfcase>
 			
 			<cfcase value="CORNFLOWER_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$CORNFLOWER_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$CORNFLOWER_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="DARK_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$DARK_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="DARK_GREEN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$DARK_GREEN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_GREEN").index />
 			</cfcase>
 			
 			<cfcase value="DARK_RED">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$DARK_RED").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_RED").index />
 			</cfcase>
 			
 			<cfcase value="DARK_TEAL">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$DARK_TEAL").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_TEAL").index />
 			</cfcase>
 			
 			<cfcase value="DARK_YELLOW">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$DARK_YELLOW").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_YELLOW").index />
 			</cfcase>
 			
 			<cfcase value="GOLD">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$GOLD").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GOLD").index />
 			</cfcase>
 			
 			<cfcase value="GREEN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$GREEN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREEN").index />
 			</cfcase>
 			
 			<cfcase value="GREY_25_PERCENT">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$GREY_25_PERCENT").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_25_PERCENT").index />
 			</cfcase>
 			
 			<cfcase value="GREY_40_PERCENT">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$GREY_40_PERCENT").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_40_PERCENT").index />
 			</cfcase>
 			
 			<cfcase value="GREY_50_PERCENT">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$GREY_50_PERCENT").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_50_PERCENT").index />
 			</cfcase>
 			
 			<cfcase value="GREY_80_PERCENT">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$GREY_80_PERCENT").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_80_PERCENT").index />
 			</cfcase>
 			
 			<cfcase value="INDIGO">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$INDIGO").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$INDIGO").index />
 			</cfcase>
 			
 			<cfcase value="LAVENDER">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LAVENDER").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LAVENDER").index />
 			</cfcase>
 			
 			<cfcase value="LEMON_CHIFFON">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LEMON_CHIFFON").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LEMON_CHIFFON").index />
 			</cfcase>
 			
 			<cfcase value="LIGHT_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIGHT_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="LIGHT_CORNFLOWER_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIGHT_CORNFLOWER_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_CORNFLOWER_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="LIGHT_GREEN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIGHT_GREEN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_GREEN").index />
 			</cfcase>
 			
 			<cfcase value="LIGHT_ORANGE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIGHT_ORANGE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_ORANGE").index />
 			</cfcase>
 			
 			<cfcase value="LIGHT_TURQUOISE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIGHT_TURQUOISE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_TURQUOISE").index />
 			</cfcase>
 			
 			<cfcase value="LIGHT_YELLOW">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIGHT_YELLOW").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_YELLOW").index />
 			</cfcase>
 			
 			<cfcase value="LIME">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$LIME").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIME").index />
 			</cfcase>
 			
 			<cfcase value="MAROON">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$MAROON").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$MAROON").index />
 			</cfcase>
 			
 			<cfcase value="OLIVE_GREEN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$OLIVE_GREEN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$OLIVE_GREEN").index />
 			</cfcase>
 			
 			<cfcase value="ORANGE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$ORANGE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ORANGE").index />
 			</cfcase>
 			
 			<cfcase value="ORCHID">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$ORCHID").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ORCHID").index />
 			</cfcase>
 			
 			<cfcase value="PALE_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$PALE_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$PALE_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="PINK">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$PINK").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$PINK").index />
 			</cfcase>
 			
 			<cfcase value="PLUM">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$PLUM").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$PLUM").index />
 			</cfcase>
 			
 			<cfcase value="RED">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$RED").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$RED").index />
 			</cfcase>
 			
 			<cfcase value="ROSE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$ROSE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ROSE").index />
 			</cfcase>
 			
 			<cfcase value="ROYAL_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$ROYAL_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ROYAL_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="SEA_GREEN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$SEA_GREEN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$SEA_GREEN").index />
 			</cfcase>
 			
 			<cfcase value="SKY_BLUE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$SKY_BLUE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$SKY_BLUE").index />
 			</cfcase>
 			
 			<cfcase value="TAN">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$TAN").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$TAN").index />
 			</cfcase>
 			
 			<cfcase value="TEAL">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$TEAL").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$TEAL").index />
 			</cfcase>
 			
 			<cfcase value="TURQUOISE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$TURQUOISE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$TURQUOISE").index />
 			</cfcase>
 			
 			<cfcase value="VIOLET">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$VIOLET").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$VIOLET").index />
 			</cfcase>
 			
 			<cfcase value="WHITE">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$WHITE").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$WHITE").index />
 			</cfcase>
 			
 			<cfcase value="YELLOW">
-				<cfset colorIndex = CreateObject("java", "org.apache.poi.hssf.util.HSSFColor$YELLOW").index />
+				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$YELLOW").index />
 			</cfcase>
 			
 			<cfdefaultcase>
