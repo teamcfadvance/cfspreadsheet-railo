@@ -5,7 +5,6 @@
 	
 	<cffunction name="loadPoi" access="private" output="false" returntype="any">
 		<cfargument name="javaclass" type="string" required="true" hint="I am the java class to be loaded" />
-		<cfargument name="javainit" type="string" required="false" hint="I am the java initilising parameters" />
 		<cfscript>
 			if( NOT structKeyExists( server, "_poiLoader")){
 				//create the loader
@@ -43,7 +42,7 @@
 	<!--- CONSTRUCTOR --->
 	<cffunction name="init" access="public" output="false" returntype="Spreadsheet"
 				Hint="Creates or loads a workbook from disk. Returns a new Spreadsheet object.">
-		<cfargument name="sheetName" type="string" default="Sheet1" Hint="Name of the initial Sheet -or- name of the Sheet to activate." />
+		<cfargument name="sheetName" type="string" required="false" Hint="Name of the initial Sheet -or- name of the Sheet to activate." />
 		<cfargument name="useXmlFormat" type="boolean" required="false" Hint="If true, creates an .xlsx workbook (ie XSSFWorkbook). Otherwise, creates a binary .xls object (ie HSSFWorkbook)" />
 		<cfargument name="src" type="string" required="false" Hint="Path to an existing workbook on disk" />
 		<cfargument name="sheet" type="numeric" required="false" Hint="Activate the sheet at this position. Applies only when using 'src'" />
@@ -54,12 +53,17 @@
 						detail="Cannot specify both 'src' and 'useXmlFormat'. Argument 'useXmlFormat' only applies to new spreadsheets" />
 		</cfif>
 		
+
 		<!--- Load an existing workbook from disk ---->
 		<cfif structKeyExists(arguments, "src")>
 			<cfset setWorkbook( readFromFile(argumentCollection=arguments) ) />
 
 		<!--- create a new workbook with a blank sheet ---->
 		<cfelse>
+			<!--- If a sheet name was not provided, use the default "Sheet1" --->
+			<cfif not structKeyExists(arguments, "sheetName")>
+				<cfset arguments.sheetName = "Sheet1" />
+			</cfif> 
 			<cfset setWorkbook( createWorkBook(argumentCollection=arguments) ) />
 			<cfset setActiveSheet( arguments.sheetName ) />
 		</cfif>
@@ -1630,7 +1634,7 @@
 	<!--- PRIVATE FUNCTIONS --->
 
 	<!--- Note: XML format is not fully supported yet  --->
-	<cffunction name="createWorkBook" access="public" output="false" returntype="any"
+	<cffunction name="createWorkBook" access="private" output="false" returntype="any"
 				Hint="This function creates and returns a new POI Workbook with one blank Sheet">
 		<cfargument name="sheetName" type="string" default="Sheet1" Hint="Name of the initial Sheet. Default name is 'Sheet1'" />							
 		<cfargument name="useXMLFormat" type="boolean" default="false" Hint="If true, returns type XSSFWorkbook (xml). Otherwise, returns an HSSFWorkbook (binary)"/>							
@@ -1650,7 +1654,7 @@
 		<cfreturn newWorkBook />
 	</cffunction>
 
-	<cffunction name="createSheet" access="public" output="false" returntype="void"
+	<cffunction name="createSheet" access="private" output="false" returntype="void"
 				Hint="Adds a new WorkSheet to the current spreadsheet. Throws an error if the Sheet name already exists">
 		<cfargument name="sheetName" type="string" required="true" Hint="Name of the new sheet" />							
 		<cfargument name="sheet" type="numeric" required="false" Hint="Insert the new sheet at this position" />							
@@ -1673,7 +1677,7 @@
 		</cfif>
 	</cffunction>
 
-	<cffunction name="moveSheet" access="public" output="false" returntype="void"
+	<cffunction name="moveSheet" access="private" output="false" returntype="void"
 				Hint="Moves a Sheet Name to the given position">
 		<cfargument name="sheetName" type="string" required="true" Hint="Name of the sheet to move" />							
 		<cfargument name="sheet" type="numeric" required="true" Hint="Move the sheet to this position" />
@@ -1705,7 +1709,7 @@
 		<cfargument name="src" type="string" required="true" hint="The full file path to the spreadsheet" />
 		<cfargument name="sheet" type="numeric" required="false" hint="Used to set the active sheet" />
 		<cfargument name="sheetName" type="string" required="false" hint="Used to set the active sheet" />
-		
+
 		<!--- Fail fast --->
 		<cfif StructKeyExists(arguments, "sheet") and StructKeyExists(arguments, "sheetname")>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
