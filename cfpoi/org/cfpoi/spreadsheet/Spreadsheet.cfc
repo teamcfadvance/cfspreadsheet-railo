@@ -5,6 +5,7 @@
 	
 	<cffunction name="loadPoi" access="private" output="false" returntype="any">
 		<cfargument name="javaclass" type="string" required="true" hint="I am the java class to be loaded" />
+
 		<cfscript>
 			if( NOT structKeyExists( server, "_poiLoader")){
 				//create the loader
@@ -249,8 +250,9 @@
 		<cfabort> --->
 		
 		<cfif StructKeyExists(arguments, "sheetname")>
-
-			<cfif arguments.isUpdate and getWorkbook().getSheet(JavaCast("string", arguments.sheetname)) neq "">
+			<!--- On Railo, this fails with "can't compare complex object types as simple value"
+			<cfif arguments.isUpdate and getWorkbook().getSheet(JavaCast("string", arguments.sheetname)) neq ""> --->
+			<cfif arguments.isUpdate and getWorkbook().getSheetIndex(JavaCast("string", arguments.sheetname)) gte 0> 				
 				<cfset getWorkbook().removeSheetAt(JavaCast("int", getWorkbook().getSheetIndex(JavaCast("string", arguments.sheetname)))) />
 			</cfif>
 			
@@ -261,8 +263,12 @@
 
 			<cfset sheetToWrite = getWorkbook().createSheet(JavaCast("string", arguments.sheetname)) />
 		<cfelseif StructKeyExists(arguments, "sheet")>
+			<!--- On Railo, this fails with "can't compare complex object types as simple value"
 			<cfif arguments.isUpdate and arguments.sheet lte getWorkbook().getNumberOfSheets() 
-					and getWorkbook().getSheetAt(JavaCast("int", arguments.sheet - 1)) neq "">
+					and arguments.sheet gte 0 getWorkbook().getSheetAt(JavaCast("int", arguments.sheet - 1)) neq ""> --->
+			<!--- If this is a valid sheet position ... --->		
+			<cfif arguments.isUpdate and arguments.sheet gt 0 
+					and arguments.sheet lte getWorkbook().getNumberOfSheets() >
 				<cfset getWorkbook().removeSheetAt(JavaCast("int", arguments.sheet - 1)) />
 			</cfif>
 
@@ -1047,7 +1053,7 @@
 			<cfset row = rowIterator.next() />
 			<cfset cell = row.getCell(JavaCast("int", arguments.columnNum - 1)) />
 			
-			<cfif cell neq "">
+			<cfif not IsNull(cell)>
 				<cfset row.removeCell(cell) />
 			</cfif>
 		</cfloop>
@@ -1123,7 +1129,7 @@
 					<cfset tempCell = row.getCell(JavaCast("int", i)) />
 					<cfset cell = createCell(row, i + arguments.offset) />
 					
-					<cfif tempCell neq "">
+					<cfif not IsNull(tempCell)>
 						<cfset cell.setCellValue(JavaCast("string", tempCell.getStringCellValue())) />
 					</cfif>
 				</cfloop>
@@ -1132,7 +1138,7 @@
 					<cfset tempCell = row.getCell(JavaCast("int", i)) />
 					<cfset cell = createCell(row, i + arguments.offset) />
 					
-					<cfif tempCell neq "">
+					<cfif not IsNull(tempCell)>
 						<cfset cell.setCellValue(JavaCast("string", tempCell.getStringCellValue())) />
 					</cfif>
 				</cfloop>
@@ -1164,7 +1170,7 @@
 		<cfargument name="format" type="struct" required="true" />
 		<cfargument name="row" type="numeric" required="true" />
 		<cfargument name="column" type="numeric" required="true" />
-		
+		<!--- TODO: Check behavior with undefined rows / cells --->
 		<cfset var cell = getActiveSheet().getRow(JavaCast("int", arguments.row - 1)).getCell(JavaCast("int", arguments.column - 1)) />
 		
 		<cfif cell.toString() neq "">
@@ -1226,6 +1232,7 @@
 		<cfset var comments = StructNew() />
 		<cfset var rowIterator = 0 />
 		<cfset var cellIterator = 0 />
+		<cfset var cell = 0 />
 		
 		<cfif (StructKeyExists(arguments, "row") and not StructKeyExists(arguments, "column")) 
 				or (StructKeyExists(arguments, "column") and not StructKeyExists(arguments, "row"))>
@@ -1235,9 +1242,12 @@
 		</cfif>
 		
 		<cfif StructKeyExists(arguments, "row")>
-			<cfset comment = getActiveSheet().getRow(JavaCast("int", arguments.row - 1)).getCell(JavaCast("int", arguments.column - 1)).getCellComment() />
-			
-			<cfif comment neq "">
+			<!--- validate and retrieve the requested cell. note: row and column values are 1-based  --->
+			<cfset cell = getCellAt( JavaCast("int", arguments.row), JavaCast("int", arguments.column) ) />			
+
+			<cfset comment = cell.getCellComment() />
+			<!--- Comments may be null. So we must verify it exists before accessing it --->
+			<cfif not IsNull( comment )>
 				<cfset comments.author = comment.getAuthor() />
 				<cfset comments.column = arguments.column />
 				<cfset comments.comment = comment.getString().getString() />
@@ -1255,7 +1265,8 @@
 				<cfloop condition="#cellIterator.hasNext()#">
 					<cfset comment = cellIterator.next().getCellComment() />
 					
-					<cfif comment neq "">
+					<!--- Comments may be null. So we must verify it exists before accessing it --->
+					<cfif not IsNull( comment )>
 						<cfset theComment = StructNew() />
 						<cfset theComment.author = comment.getAuthor() />
 						<cfset theComment.column = comment.getColumn() + 1 />
@@ -1304,16 +1315,12 @@
 		<cfset var commentString = loadPoi("org.apache.poi.hssf.usermodel.HSSFRichTextString").init(JavaCast("string", arguments.comment.comment)) />
 		<cfset var font = 0 />
 		<cfset var javaColorRGB = 0 />
-		
-		<!--- make sure the cell exists before proceeding --->
-		<cfif getActiveSheet().getRow(JavaCast("int", arguments.row - 1)) eq "" 
-				or getActiveSheet().getRow(JavaCast("int", arguments.row - 1)).getCell(JavaCast("int", arguments.column - 1)) eq "">
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-						message="Cell Does Not Exist" 
-						detail="The cell on which a comment is attempting to be set does not exist." />
-		<cfelse>
-			<cfif StructKeyExists(arguments.comment, "anchor")>
-				<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
+
+		<!--- make sure the cell exists before proceeding. note: row and column values are 1-based  --->
+		<cfset var cell = getCellAt( JavaCast("int", arguments.row ), JavaCast("int", arguments.column ) ) />
+
+		<cfif StructKeyExists(arguments.comment, "anchor")>
+			<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
@@ -1321,9 +1328,9 @@
 																													JavaCast("int", ListGetAt(arguments.comment.anchor, 2)), 
 																													JavaCast("int", ListGetAt(arguments.comment.anchor, 3)), 
 																													JavaCast("int", ListGetAt(arguments.comment.anchor, 4))) />
-			<cfelse>
-				<!--- if no anchor is provided, just use + 2 --->
-				<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
+		<cfelse>
+			<!--- if no anchor is provided, just use + 2 --->
+			<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
@@ -1331,124 +1338,122 @@
 																													JavaCast("int", arguments.row), 
 																													JavaCast("int", arguments.column + 2), 
 																													JavaCast("int", arguments.row + 2)) />
-			</cfif>
+		</cfif>
 			
-			<cfset commentObj = drawingPatriarch.createComment(clientAnchor) />
+		<cfset commentObj = drawingPatriarch.createComment(clientAnchor) />
 			
-			<cfif StructKeyExists(arguments.comment, "author")>
-				<cfset commentObj.setAuthor(JavaCast("string", arguments.comment.author)) />
-			</cfif>
+		<cfif StructKeyExists(arguments.comment, "author")>
+			<cfset commentObj.setAuthor(JavaCast("string", arguments.comment.author)) />
+		</cfif>
 			
-			<!--- If we're going to do anything font related, need to create a font. 
-					Didn't really want to create it above since it might not be needed. --->
-			<cfif StructKeyExists(arguments.comment, "bold") 
+		<!--- If we're going to do anything font related, need to create a font. 
+				Didn't really want to create it above since it might not be needed. --->
+		<cfif StructKeyExists(arguments.comment, "bold") 
 					or StructKeyExists(arguments.comment, "color") 
 					or StructKeyExists(arguments.comment, "font")
 					or StructKeyExists(arguments.comment, "italic")
 					or StructKeyExists(arguments.comment, "size") 
 					or StructKeyExists(arguments.comment, "strikeout") 
 					or StructKeyExists(arguments.comment, "underline")>
-				<cfset font = getWorkbook().createFont() />
+			<cfset font = getWorkbook().createFont() />
 				
-				<cfif StructKeyExists(arguments.comment, "bold")>
-					<cfif arguments.comment.bold>
-						<cfset font.setBoldweight(font.BOLDWEIGHT_BOLD) />
-					<cfelse>
-						<cfset font.setBoldweight(font.BOLDWEIGHT_NORMAL) />
-					</cfif>
+			<cfif StructKeyExists(arguments.comment, "bold")>
+				<cfif arguments.comment.bold>
+					<cfset font.setBoldweight(font.BOLDWEIGHT_BOLD) />
+				<cfelse>
+					<cfset font.setBoldweight(font.BOLDWEIGHT_NORMAL) />
 				</cfif>
-				
-				<cfif StructKeyExists(arguments.comment, "color")>
-					<cfset font.setColor(JavaCast("int", getColorIndex(arguments.comment.color))) />
-				</cfif>
-				
-				<cfif StructKeyExists(arguments.comment, "font")>
-					<cfset font.setFontName(JavaCast("string", arguments.comment.font)) />
-				</cfif>
-				
-				<cfif StructKeyExists(arguments.comment, "italic")>
-					<cfset font.setItalic(JavaCast("boolean", arguments.comment.italic)) />
-				</cfif>
-				
-				<cfif StructKeyExists(arguments.comment, "size")>
-					<cfset font.setFontHeightInPoints(JavaCast("int", arguments.comment.size)) />
-				</cfif>
-				
-				<cfif StructKeyExists(arguments.comment, "strikeout")>
-					<cfset font.setStrikeout(JavaCast("boolean", arguments.comment.strikeout)) />
-				</cfif>
-				
-				<cfif StructKeyExists(arguments.comment, "underline")>
-					<cfset font.setUnderline(JavaCast("boolean", arguments.comment.underline)) />
-				</cfif>
-				
-				<cfset commentString.applyFont(font) />
 			</cfif>
 			
-			<cfif StructKeyExists(arguments.comment, "fillcolor")>
-				<cfset javaColorRGB = getJavaColorRGB(arguments.comment.fillcolor) />
-				<cfset commentObj.setFillColor(JavaCast("int", javaColorRGB.red), 
+			<cfif StructKeyExists(arguments.comment, "color")>
+				<cfset font.setColor(JavaCast("int", getColorIndex(arguments.comment.color))) />
+			</cfif>
+			
+			<cfif StructKeyExists(arguments.comment, "font")>
+				<cfset font.setFontName(JavaCast("string", arguments.comment.font)) />
+			</cfif>
+			
+			<cfif StructKeyExists(arguments.comment, "italic")>
+				<cfset font.setItalic(JavaCast("boolean", arguments.comment.italic)) />
+			</cfif>
+			
+			<cfif StructKeyExists(arguments.comment, "size")>
+				<cfset font.setFontHeightInPoints(JavaCast("int", arguments.comment.size)) />
+			</cfif>
+			
+			<cfif StructKeyExists(arguments.comment, "strikeout")>
+				<cfset font.setStrikeout(JavaCast("boolean", arguments.comment.strikeout)) />
+			</cfif>
+			
+			<cfif StructKeyExists(arguments.comment, "underline")>
+				<cfset font.setUnderline(JavaCast("boolean", arguments.comment.underline)) />
+			</cfif>
+				
+			<cfset commentString.applyFont(font) />
+		</cfif>
+			
+		<cfif StructKeyExists(arguments.comment, "fillcolor")>
+			<cfset javaColorRGB = getJavaColorRGB(arguments.comment.fillcolor) />
+			<cfset commentObj.setFillColor(JavaCast("int", javaColorRGB.red), 
+											JavaCast("int", javaColorRGB.green), 
+											JavaCast("int", javaColorRGB.blue)) />
+		</cfif>
+		
+		<!---- Horizontal alignment can be left, center, right, justify, or distributed. 
+				Note that the constants on the Java class are slightly different in some cases:
+				'center' = CENTERED
+				'justify' = JUSTIFIED --->
+		<cfif StructKeyExists(arguments.comment, "horizontalalignment")>
+			<cfif UCase(arguments.comment.horizontalalignment) eq "CENTER">
+				<cfset arguments.comment.horizontalalignment = "CENTERED" />
+			</cfif>
+			
+			<cfif UCase(arguments.comment.horizontalalignment) eq "JUSTIFY">
+				<cfset arguments.comment.horizontalalignment = "JUSTIFIED" />
+			</cfif>
+				
+			<cfset commentObj.setHorizontalAlignment(JavaCast("int", Evaluate("commentObj.HORIZONTAL_ALIGNMENT_#UCase(arguments.comment.horizontalalignment)#"))) />
+		</cfif>
+			
+		<!--- Valid values for linestyle are:
+				* solid
+				* dashsys
+				* dashdotsys
+				* dashdotdotsys
+				* dotgel
+				* dashgel
+				* longdashgel
+				* dashdotgel
+				* longdashdotgel
+				* longdashdotdotgel
+		--->
+		<cfif StructKeyExists(arguments.comment, "linestyle")>
+			<cfset commentObj.setLineStyle(JavaCast("int", Evaluate("commentObj.LINESTYLE_#UCase(arguments.comment.linestyle)#"))) />
+		</cfif>
+		
+		<!--- TODO: This doesn't seem to be working (no error, but doesn't do anything).
+					Saw reference on the POI mailing list to this not working but it was
+					from over a year ago; maybe it's just still broken.  --->
+		<cfif StructKeyExists(arguments.comment, "linestylecolor")>
+			<cfset javaColorRGB = getJavaColorRGB(arguments.comment.fillcolor) />
+			<cfset commentObj.setLineStyleColor(JavaCast("int", javaColorRGB.red), 
 												JavaCast("int", javaColorRGB.green), 
 												JavaCast("int", javaColorRGB.blue)) />
-			</cfif>
-			
-			<!---- Horizontal alignment can be left, center, right, justify, or distributed. 
-					Note that the constants on the Java class are slightly different in some cases:
-					'center' = CENTERED
-					'justify' = JUSTIFIED --->
-			<cfif StructKeyExists(arguments.comment, "horizontalalignment")>
-				<cfif UCase(arguments.comment.horizontalalignment) eq "CENTER">
-					<cfset arguments.comment.horizontalalignment = "CENTERED" />
-				</cfif>
-				
-				<cfif UCase(arguments.comment.horizontalalignment) eq "JUSTIFY">
-					<cfset arguments.comment.horizontalalignment = "JUSTIFIED" />
-				</cfif>
-				
-				<cfset commentObj.setHorizontalAlignment(JavaCast("int", Evaluate("commentObj.HORIZONTAL_ALIGNMENT_#UCase(arguments.comment.horizontalalignment)#"))) />
-			</cfif>
-			
-			<!--- Valid values for linestyle are:
-					* solid
-					* dashsys
-					* dashdotsys
-					* dashdotdotsys
-					* dotgel
-					* dashgel
-					* longdashgel
-					* dashdotgel
-					* longdashdotgel
-					* longdashdotdotgel
-			--->
-			<cfif StructKeyExists(arguments.comment, "linestyle")>
-				<cfset commentObj.setLineStyle(JavaCast("int", Evaluate("commentObj.LINESTYLE_#UCase(arguments.comment.linestyle)#"))) />
-			</cfif>
-			
-			<!--- TODO: This doesn't seem to be working (no error, but doesn't do anything).
-						Saw reference on the POI mailing list to this not working but it was
-						from over a year ago; maybe it's just still broken.  --->
-			<cfif StructKeyExists(arguments.comment, "linestylecolor")>
-				<cfset javaColorRGB = getJavaColorRGB(arguments.comment.fillcolor) />
-				<cfset commentObj.setLineStyleColor(JavaCast("int", javaColorRGB.red), 
-													JavaCast("int", javaColorRGB.green), 
-													JavaCast("int", javaColorRGB.blue)) />
-			</cfif>
-			
-			<!--- Vertical alignment can be top, center, bottom, justify, and distributed. 
-					Note that center and justify are DIFFERENT than the constants for 
-					horizontal alignment, which are CENTERED and JUSTIFIED. --->
-			<cfif StructKeyExists(arguments.comment, "verticalalignment")>
-				<cfset commentObj.setVerticalAlignment(JavaCast("int", Evaluate("commentObj.VERTICAL_ALIGNMENT_#UCase(arguments.comment.verticalalignment)#"))) />
-			</cfif>
-			
-			<cfif StructKeyExists(arguments.comment, "visible")>
-				<cfset commentObj.setVisible(JavaCast("boolean", arguments.comment.visible)) />
-			</cfif>
-			
-			<cfset commentObj.setString(commentString) />
-	
-			<cfset getActiveSheet().getRow(JavaCast("int", arguments.row - 1)).getCell(JavaCast("int", arguments.column - 1)).setCellComment(commentObj) />
 		</cfif>
+			
+		<!--- Vertical alignment can be top, center, bottom, justify, and distributed. 
+				Note that center and justify are DIFFERENT than the constants for 
+				horizontal alignment, which are CENTERED and JUSTIFIED. --->
+		<cfif StructKeyExists(arguments.comment, "verticalalignment")>
+			<cfset commentObj.setVerticalAlignment(JavaCast("int", Evaluate("commentObj.VERTICAL_ALIGNMENT_#UCase(arguments.comment.verticalalignment)#"))) />
+		</cfif>
+		
+		<cfif StructKeyExists(arguments.comment, "visible")>
+			<cfset commentObj.setVisible(JavaCast("boolean", arguments.comment.visible)) />
+		</cfif>
+		
+		<cfset commentObj.setString(commentString) />
+		<cfset cell.setCellComment(commentObj) />
 	</cffunction>
 	
 	<cffunction name="getCellFormula" access="public" output="false" returntype="any" 
@@ -1513,7 +1518,6 @@
 		<cfargument name="column" type="numeric" required="true" />
 		
 		<cfset var returnVal = "" />
-		
 		<!--- TODO: need to worry about additional cell types? --->
 		<cfswitch expression="#getActiveSheet().getRow(JavaCast('int', arguments.row - 1)).getCell(JavaCast('int', arguments.column - 1)).getCellType()#">
 			<!--- numeric or formula --->
@@ -1536,8 +1540,26 @@
 		<cfargument name="row" type="numeric" required="true" />
 		<cfargument name="column" type="numeric" required="true" />
 		
+		<cfif (arguments.row lte 0) or (arguments.column lte 0)>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+					message="Invalid Row or Column Index" 
+					detail="Both the row [#arguments.row#] and column [#arguments.column#] values must be greater than zero." />
+		</cfif>			
+
+		<!--- if this row does not exist, create it --->
+		<cfset Local.row = getActiveSheet().getRow( arguments.row - 1) />
+		<cfif IsNull( Local.row )>
+			<cfset Local.row = createRow( arguments.row - 1) />
+		</cfif>
+
+		<!--- if the cell does not exist, create it too --->
+		<cfset Local.cell = Local.row.getCell( JavaCast("int", arguments.column - 1) ) />
+		<cfif IsNull( Local.cell )>
+			<cfset Local.cell = createCell( Local.row, JavaCast("int", arguments.column - 1) ) />
+		</cfif>
+		
 		<!--- TODO: need to worry about data types? doing everything as a string for now --->
-		<cfset getActiveSheet().getRow(JavaCast("int", arguments.row - 1)).getCell(JavaCast("int", arguments.column - 1)).setCellValue(JavaCast("string", arguments.cellValue)) />
+		<cfset Local.cell.setCellValue( JavaCast("string", arguments.cellValue) ) />
 	</cffunction>
 	
 	<cffunction name="setColumnWidth" access="public" output="false" returntype="void" 
@@ -1561,6 +1583,35 @@
 																											JavaCast("int", arguments.endColumn - 1)) />
 		
 		<cfset getActiveSheet().addMergedRegion(cellRangeAddress) />
+	</cffunction>
+
+	<!--- Retrieves the requested cell. Generates a user friendly error 
+		when an invalid cell position is specified --->
+	<cffunction name="getCellAt" access="private" output="false" returntype="any"
+				Hint="Returns the cell at the given position. Throws exception if the cell does not exist.">
+		<cfargument name="row" type="numeric" required="true" Hint="Row index of cell to retrieve ( 1-based !)"/>
+		<cfargument name="column" type="numeric" required="true" Hint="Col index of cell to retrieve ( 1-based !)"/>
+		
+		<cfset Local.row 	= 0 />
+		<cfset Local.cell 	= 0 />
+		
+		<!--- If row does not exist, there is no need to keep checking --->
+		<cfset Local.row = getActiveSheet().getRow( JavaCast("int", arguments.row - 1) ) />
+		<cfif IsNull( Local.row )>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+					message="Invalid Row Index" 
+					detail="The requested cell [#arguments.row#, #arguments.column#] does not exist in the active sheet" />
+		</cfif>	
+		
+		<cfset Local.cell = Local.row.getCell( JavaCast("int", arguments.column-1) ) />
+		<cfif IsNull( Local.cell )>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+					message="Invalid Column Index" 
+					detail="The requested cell [#arguments.row#, #arguments.column#] does not exist in the active sheet" />
+		</cfif>	
+				
+		<!--- Otherwise, it is safe to return the requested cell --->
+		<cfreturn Local.cell />
 	</cffunction>
 
 	<!--- LOWER-LEVEL SPREADSHEET MANIPULATION FUNCTIONS --->
