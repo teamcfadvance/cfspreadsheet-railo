@@ -791,7 +791,8 @@
 				<cfset rowNum = arguments.row - 1 />
 			</cfif>
 		<cfelse>
-			<cfset rowNum = getActiveSheet().getPhysicalNumberOfRows() />
+			<!--- If a row number was not supplied, move to the next empty row --->
+			<cfset rowNum = getNextEmptyRow() />
 		</cfif>
 		
 		<cfloop query="arguments.data">
@@ -859,7 +860,21 @@
 			</cfif>
 		</cfloop>
 	</cffunction>
-	
+
+	<!--- As mentioned in the POI API, when getLastRowNum() is 0 it could mean two things: 
+	      either the sheet has no rows =OR= the last populated row index is 0.We must call 
+	      getPhysicalNumberOfRows() to differentiate --->
+	<cffunction name="getNextEmptyRow" access="private" output="false" returntype="numeric"
+				Hint="Returns the index of the next empty row in the active sheet (0-based)"> 
+		
+		<!--- The sheet is emtpy. So start on the first row  --->
+		<cfif getActiveSheet().getLastRowNum() eq 0 AND getActiveSheet().getPhysicalNumberOfRows() eq 0>
+			<cfreturn 0 />
+		</cfif>    
+		<!--- Otherwise, increment the value of the last populated row --->
+		<cfreturn getActiveSheet().getLastRowNum() + 1 />
+	</cffunction>
+		
 	<cffunction name="shiftRows" access="public" output="false" returntype="void" 
 			hint="Shifts rows up (negative integer) or down (positive integer)">
 		<cfargument name="startRow" type="numeric" required="true" />
@@ -1556,7 +1571,9 @@
 		<!--- if rowNum is provided and is lte the last row number, 
 				need to shift existing rows down by 1 --->
 		<cfif not StructKeyExists(arguments, "rowNum")>
-			<cfset arguments.rowNum = getActiveSheet().getLastRowNum() />
+			<!--- If a row number was not supplied, move to the next empty row --->
+			<cfset arguments.rowNum = getNextEmptyRow() />
+			
 		<!--- TODO: need to revisit this; this isn't quite the behavior necessary, but 
 					leaving it out for now is fine
 		 <cfelse>
