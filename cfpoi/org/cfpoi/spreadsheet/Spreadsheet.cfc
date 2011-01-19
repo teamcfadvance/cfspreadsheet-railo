@@ -1,6 +1,6 @@
 <cfcomponent 
 	displayname="Spreadsheet" 
-	output="true" 
+	output="false" 
 	hint="CFC wrapper for the Apache POI project's HSSF (xls) and XSSF (xlsx) classes">
 	
 	<cffunction name="loadPoi" access="private" output="false" returntype="any">
@@ -1451,13 +1451,13 @@
 		<cfset cell.setCellComment(commentObj) />
 	</cffunction>
 	
-	<cffunction name="getCellFormula" access="public" output="true" returntype="any" 
+	<cffunction name="getCellFormula" access="public" output="false" returntype="any" 
 			hint="Returns the formula for a cell or for the entire spreadsheet">
 		<cfargument name="row" type="numeric" required="false" />
 		<cfargument name="column" type="numeric" required="false" />
 		
 		<cfset var formulaStruct = 0 />
-		<cfset var formulas = 0 />
+		<cfset var formulas  = 0 />
 		<cfset var rowIterator = 0 />
 		<cfset var cellIterator = 0 />
 		<cfset var cell = 0 />
