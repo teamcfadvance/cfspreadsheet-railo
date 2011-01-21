@@ -1,6 +1,6 @@
 <cfcomponent 
 	displayname="Spreadsheet" 
-	output="false" 
+	output="false"  
 	hint="CFC wrapper for the Apache POI project's HSSF (xls) and XSSF (xlsx) classes">
 	
 	<cffunction name="loadPoi" access="private" output="false" returntype="any">
@@ -719,23 +719,13 @@
 				in header or footer (tons more stuff like this that could easily be added) --->
 	
 	<!--- row functions --->
-	<!--- TODO: SpreadsheetAddRow in CF 9 is not consitent with SpreadsheetAddColumn because there 
-				is no option to pass a boolean indicating whether or not the existing row should 
-				be overwritten. Instead, it will only insert the new row and shift existing rows 
-				down (i.e. increment their row number) by one, which would necessitate a deletion 
-				of the existing row if an overwrite is desired. Leaving behavior as is for now but 
-				might be worth changing/enhancing later. --->
 	<cffunction name="addRow" access="public" output="false" returntype="void" 
 			hint="Adds a new row and inserts the data provided in the new row.">
 		<cfargument name="data" type="string" required="true" hint="Delimited list of data" />
-		<cfargument name="delimiter" type="string" required="true" />
 		<cfargument name="startRow" type="numeric" required="false" />
-		<cfargument name="startColumn" type="numeric" required="false" />
-		
-		<cfset var row = 0 />
-		<cfset var cell = 0 />
-		<cfset var cellNum = 0 />
-		<cfset var cellValue = 0 />
+		<cfargument name="startColumn" type="numeric" default="1" />
+		<cfargument name="insert" type="boolean" default="true" />
+		<cfargument name="delimiter" type="string" default="," />
 		
 		<cfif StructKeyExists(arguments, "startRow") and arguments.startRow lte 0>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
@@ -749,47 +739,81 @@
 						detail="The value for column must be greater than or equal to 1." />
 		</cfif>
 		
-		<cfif not StructKeyExists(arguments, "startRow")>
-			<cfset row = createRow() />
+		<!--- this equates to the last populated row in base-1. getNextEmptyRow() contains
+			special handling required work around eccentricities with getLastRowNum(). --->
+		<cfset Local.lastRow = getNextEmptyRow() />
+
+		<!--- If the requested row already exists ... --->
+		<cfif StructKeyExists(arguments, "startRow") and arguments.startRow lte Local.lastRow>
+
+			<!--- shift the existing rows down (by one row) --->
+			<cfif arguments.insert> 
+				<cfset shiftRows( arguments.startRow, Local.lastRow, 1 ) />
+			<!--- otherwise, clear the entire row --->
+			<cfelse>
+				<cfset deleteRow( arguments.startRow ) /> 
+			</cfif>
+
+		</cfif>
+
+		<cfif StructKeyExists(arguments, "startRow")>
+			<cfset Local.theRow = createRow( arguments.startRow - 1 ) />
 		<cfelse>
-			<!--- TODO: Since the current function inserts only, should we be shifting rows here ...? --->
-			<cfset row = createRow(arguments.startRow - 1) />
+			<cfset Local.theRow	= createRow() />
 		</cfif>
-		
-		<cfif StructKeyExists(arguments, "startColumn")>
-			<cfset cellNum = arguments.startColumn - 1 />
-		</cfif>
-		
+
+	
 		<!--- TODO: treating all data as strings; need to support data types? --->
-		<cfloop list="#arguments.data#" index="cellValue" delimiters="#arguments.delimiter#">
-			<cfset cell = createCell(row, cellNum) />
-			<cfset cell.setCellValue(JavaCast("string", cellValue)) />
-			<cfset cellNum = cellNum + 1 />
+		<cfset Local.cellNum = arguments.startColumn - 1 />  
+		<cfloop list="#arguments.data#" index="Local.cellValue" delimiters="#arguments.delimiter#">
+			<cfset Local.cell = createCell( Local.theRow, Local.cellNum ) />
+			<cfset Local.cell.setCellValue( JavaCast("string", Local.cellValue) ) />
+			<cfset Local.cellNum = Local.cellNum + 1 />
 		</cfloop>
+
 	</cffunction>
 	
 	<cffunction name="addRows" access="public" output="false" returntype="void" 
 			hint="Adds rows to a sheet from a query object">
 		<cfargument name="data" type="query" required="true" />
 		<cfargument name="row" type="numeric" required="false" />
+		<cfargument name="column" type="numeric" default="1" />
+		<cfargument name="insert" type="boolean" default="true" />
 		
-		<cfset var column  = 0 />
-		<cfset var theRow  = 0 />
-		<cfset var rowNum  = 0 />
-		<cfset var cell    = 0 />
-		<cfset var cellNum = 0 />
+		<cfif StructKeyExists(arguments, "row") and arguments.row lte 0>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Row Value" 
+						detail="The value for row must be greater than or equal to 1." />
+		</cfif>
 		
-		<cfif StructKeyExists(arguments, "row")>
-			<cfif arguments.row lte 0>
-				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-							message="Invalid Row Value" 
-							detail="The value for row must be greater than or equal to 1." />
+		<cfif StructKeyExists(arguments, "column") and arguments.column lte 0>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Column Value" 
+						detail="The value for column must be greater than or equal to 1." />
+		</cfif>
+				
+		<!--- this equates to the last populated row in base-1. getNextEmptyRow() contains
+			special handling required work around eccentricities with getLastRowNum(). --->
+		<cfset Local.lastRow = getNextEmptyRow() />
+
+		<!--- If the requested row already exists ... --->
+		<cfif StructKeyExists(arguments, "row") and arguments.row lte Local.lastRow>
+
+			<!--- shift the existing rows down  --->
+			<cfif arguments.insert> 
+				<cfset shiftRows( arguments.row, Local.lastRow, arguments.data.recordCount ) />
+			<!--- otherwise, clear the entire row --->
 			<cfelse>
-				<cfset rowNum = arguments.row - 1 />
+				<cfset deleteRow( arguments.row ) /> 
 			</cfif>
+
+		</cfif>
+
+		<!--- convert to base 0 for compatibility with existing functions. --->
+		<cfif StructKeyExists(arguments, "row")>
+			<cfset Local.rowNum = arguments.row - 1 />
 		<cfelse>
-			<!--- If a row number was not supplied, move to the next empty row --->
-			<cfset rowNum = getNextEmptyRow() />
+			<cfset Local.rowNum	= getNextEmptyRow() />
 		</cfif>
 
 		
@@ -798,24 +822,17 @@
 					list of data (probably not the greatest limitation ...) and the query 
 					data may have commas in it, so this is a bit redundant with the addRow() 
 					function --->
-			<cfset theRow = createRow(rowNum) />
+			<cfset Local.theRow = createRow( Local.rowNum ) />
+			<cfset Local.cellNum = arguments.column - 1 />
 			
-			<!--- odd that you can't specify a start column when adding multiple rows, 
-					but that's the way it is in cf 9 so leaving this out for now --->
-			<!--- <cfif StructKeyExists(arguments, "startColumn")>
-				<cfset cellNum = arguments.startColumn - 1 />
-			</cfif> --->
-
-
 			<!--- TODO: treating all data as strings; need to support data types? --->
-			<cfset cellNum = 0 />
-			<cfloop list="#arguments.data.ColumnList#" index="column">
-				<cfset cell = createCell(theRow, cellNum) />
-				<cfset cell.setCellValue(JavaCast("string", arguments.data[column][arguments.data.CurrentRow])) />
-				<cfset cellNum = cellNum + 1 />
+			<cfloop list="#arguments.data.ColumnList#" index="Local.colName">
+				<cfset Local.cell = createCell( Local.theRow, Local.cellNum ) />
+				<cfset Local.cell.setCellValue( JavaCast("string", arguments.data[Local.colName][arguments.data.CurrentRow]) ) />
+				<cfset Local.cellNum = Local.cellNum + 1 />
 			</cfloop>
 
-			<cfset rowNum = rowNum + 1 />
+			<cfset Local.rowNum = Local.rowNum + 1 />
 		</cfloop>
 	</cffunction>
 	
@@ -896,12 +913,15 @@
 		<cfargument name="format" type="struct" required="true" />
 		<cfargument name="rowNum" type="numeric" required="true" />
 		
-		<cfset var cellIterator = getActiveSheet().getRow(arguments.rowNum - 1).cellIterator() />
+		<cfset Local.theRow = getActiveSheet().getRow(arguments.rowNum - 1) />
+		<!--- there is nothing to do if the row does not exist ... --->
+		<cfif not IsNull( Local.theRow )>
+			<cfset Local.cellIterator = Local.theRow.cellIterator() />
+			<cfloop condition="#Local.cellIterator.hasNext()#">
+				<cfset formatCell(arguments.format, arguments.rowNum, Local.cellIterator.next().getColumnIndex() + 1) />
+			</cfloop>
+		</cfif>
 		
-		<cfloop condition="#cellIterator.hasNext()#">
-			<!--- Note: If the cells are not contigous, this will create the missing cells ie fill in the gaps --->
-			<cfset formatCell(arguments.format, arguments.rowNum, cellIterator.next().getColumnIndex() + 1) />
-		</cfloop>
 	</cffunction>
 	
 	<cffunction name="formatRows" access="public" output="false" returntype="void" 
@@ -956,8 +976,8 @@
 		<cfset var cellNum = 0 />
 		<cfset var lastCellNum = 0 />
 		<cfset var i = 0 />
-		<cfset var tempCell = 0 />
-		<cfset var temp = 0 />
+		<cfset var oldCell = 0 />
+		<cfset var oldValue = 0 />
 		<cfset var cellValue = 0 />
 
 		<cfif StructKeyExists(arguments, "startRow") and arguments.startRow lte 0>
@@ -978,17 +998,23 @@
 		
 		<cfif StructKeyExists(arguments, "column")>
 			<cfset cellNum = arguments.column - 1 />
+		<cfelse>
+
+			<cfset row = getActiveSheet().getRow( rowNum ) />
+			<!--- if this row exists, find the next empty cell number. note: getLastCellNum() 
+				returns the cell index PLUS ONE or -1 if not found --->
+			<cfif not IsNull( row ) and row.getLastCellNum() gt 0>
+				<cfset cellNum = row.getLastCellNum() />
+			<cfelse>
+				<cfset cellNum = 0 />
+			</cfif>
+			
 		</cfif>
 
 
 		<cfloop list="#arguments.data#" index="cellValue" delimiters="#arguments.delimiter#">
-			<!--- if rowNum is greater than the last row of the sheet, need 
-					to create a new row --->
-				
-			<!---
-				REMOVED as second part of logic is not simple value 
-				<cfif rowNum GT getActiveSheet().getLastRowNum() OR getActiveSheet().getRow(rowNum) EQ "">
-			--->
+       		<!--- if rowNum is greater than the last row of the sheet, need 
+                                      to create a new row --->
 			<cfif rowNum GT getActiveSheet().getLastRowNum() OR isNull(getActiveSheet().getRow(rowNum))>
 
 				<cfset row = createRow(rowNum) />
@@ -999,6 +1025,7 @@
 			
 			<!--- POI doesn't have any 'shift column' functionality akin to shiftRows() 
 					so inserts get interesting ... --->
+			<!--- ** Note: row.getLastCellNum() returns the cell index PLUS ONE or -1 if not found --->		
 			<cfif arguments.insert and cellNum lt row.getLastCellNum()>
 				<!--- need to get the last populated column number in the row, figure out which 
 						cells are impacted, and shift the impacted cells to the right to make 
@@ -1006,15 +1033,16 @@
 				<cfset lastCellNum = row.getLastCellNum() + 1 />
 
 				<cfloop index="i" from="#lastCellNum#" to="#cellNum + 1#" step="-1">
-					<cfset tempCell = row.getCell(JavaCast("int", i - 1)) />
+					<cfset oldCell = row.getCell(JavaCast("int", i - 1)) />
 					
-					<!--- getLastCellNum() apparently returns the max cell number in ANY row (?), 
-							so we need to check if this is null --->
-					<cfif isDefined( "tempCell" ) AND tempCell.toString() neq "">
-						<cfset temp = tempCell.getStringCellValue() />
+					<cfif not IsNull( oldCell )>
+						<!--- TODO: Handle other cell types ? --->
 						<cfset cell = createCell(row, i) />
-						<cfset cell.setCellValue(JavaCast("string", temp)) />
+						<cfset cell.setCellStyle( oldCell.getCellStyle() ) />
+						<cfset cell.setCellValue( oldCell.getStringCellValue() ) />
+						<cfset cell.setCellComment( oldCell.getCellComment() ) />
 					</cfif>
+					
 				</cfloop>
 			</cfif>
 
@@ -1165,9 +1193,9 @@
 		<cfargument name="column" type="numeric" required="true" />
 
 		<!--- Automatically create the cell if it does not exist, instead of throwing an error --->
-		<cfset var cell = initializeCell( row=arguments.row, column=arguments.column ) />
-		<cfset cell.setCellStyle( buildCellStyle(arguments.format) ) />
-	</cffunction>
+		<cfset Local.cell = initializeCell( arguments.row, arguments.column ) />
+		<cfset Local.cell.setCellStyle( buildCellStyle(arguments.format) ) />
+ 	</cffunction>
 	
 	<cffunction name="formatColumn" access="public" output="false" returntype="void" 
 			hint="Sets various formatting values on a column">
