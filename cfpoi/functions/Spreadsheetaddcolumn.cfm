@@ -14,7 +14,6 @@
 	</cfif>
 			
 	<cfset Local.args = StructNew() />
-	
 	<cfset Local.args.data = arguments.data />
 	<cfset Local.args.delimiter = arguments.delimiter />
 	

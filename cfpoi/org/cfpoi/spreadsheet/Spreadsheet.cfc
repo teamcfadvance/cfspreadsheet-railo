@@ -119,6 +119,7 @@
 		
 		<cfset setWorkbook(readFromFile(argumentcollection = args)) />
 		
+		
 		<cfif StructKeyExists(arguments, "format")>
 			<cfset rowIterator = getActiveSheet().rowIterator() />
 			
@@ -158,6 +159,8 @@
 				</cfcase>
 
 				<cfcase value="query">
+				
+
 					<!--- If a header row is specified, use that for the query column names.
 							Otherwise, use COL_1, COL_2, etc. for column names. --->
 					<cfif StructKeyExists(arguments, "headerrow")>
@@ -785,7 +788,7 @@
 						message="Invalid Row Value" 
 						detail="The value for row must be greater than or equal to 1." />
 		</cfif>
-		
+
 		<cfif StructKeyExists(arguments, "column") and arguments.column lte 0>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 						message="Invalid Column Value" 
@@ -813,6 +816,7 @@
 		<cfif StructKeyExists(arguments, "row")>
 			<cfset Local.rowNum = arguments.row - 1 />
 		<cfelse>
+			<!--- If a row number was not supplied, move to the next empty row --->
 			<cfset Local.rowNum	= getNextEmptyRow() />
 		</cfif>
 
@@ -1873,7 +1877,12 @@
 		<cfif StructKeyExists(arguments, "sheet")>
 			<cfset workbook.setActiveSheet(JavaCast("int", arguments.sheet - 1)) />
 		<cfelseif StructKeyExists(arguments, "sheetname")>
-			<cfset workbook.setActiveSheet(JavaCast("int", workbook.getSheetIndex(JavaCast("string", arguments.sheetname)))) />
+			<cfset var workSheetIdx = workbook.getSheetIndex(JavaCast("string", arguments.sheetname)) />
+			<cfif workSheetIdx LT 0>
+				<cfset workbook.setActiveSheet(JavaCast("int", 0)) />			
+			<cfelse>
+				<cfset workbook.setActiveSheet(JavaCast("int", workbook.getSheetIndex(JavaCast("string", arguments.sheetname)))) />
+			</cfif>
 		<cfelse>
 			<!--- TODO: Should probably anticipate workbooks that have no sheets --->
 			<cfset workbook.setActiveSheet(JavaCast("int", 0)) />
