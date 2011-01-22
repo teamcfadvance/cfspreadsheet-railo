@@ -119,6 +119,7 @@
 		
 		<cfset setWorkbook(readFromFile(argumentcollection = args)) />
 		
+		
 		<cfif StructKeyExists(arguments, "format")>
 			<cfset rowIterator = getActiveSheet().rowIterator() />
 			
@@ -158,6 +159,8 @@
 				</cfcase>
 
 				<cfcase value="query">
+				
+
 					<!--- If a header row is specified, use that for the query column names.
 							Otherwise, use COL_1, COL_2, etc. for column names. --->
 					<cfif StructKeyExists(arguments, "headerrow")>
@@ -1851,7 +1854,6 @@
 			<cfelse>
 				<cfset workbook.setActiveSheet(JavaCast("int", workbook.getSheetIndex(JavaCast("string", arguments.sheetname)))) />
 			</cfif>
-			
 		<cfelse>
 			<!--- TODO: Should probably anticipate workbooks that have no sheets --->
 			<cfset workbook.setActiveSheet(JavaCast("int", 0)) />
