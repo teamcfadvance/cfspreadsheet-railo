@@ -1845,7 +1845,13 @@
 		<cfif StructKeyExists(arguments, "sheet")>
 			<cfset workbook.setActiveSheet(JavaCast("int", arguments.sheet - 1)) />
 		<cfelseif StructKeyExists(arguments, "sheetname")>
-			<cfset workbook.setActiveSheet(JavaCast("int", workbook.getSheetIndex(JavaCast("string", arguments.sheetname)))) />
+			<cfset var workSheetIdx = workbook.getSheetIndex(JavaCast("string", arguments.sheetname)) />
+			<cfif workSheetIdx LT 0>
+				<cfset workbook.setActiveSheet(JavaCast("int", 0)) />			
+			<cfelse>
+				<cfset workbook.setActiveSheet(JavaCast("int", workbook.getSheetIndex(JavaCast("string", arguments.sheetname)))) />
+			</cfif>
+			
 		<cfelse>
 			<!--- TODO: Should probably anticipate workbooks that have no sheets --->
 			<cfset workbook.setActiveSheet(JavaCast("int", 0)) />
