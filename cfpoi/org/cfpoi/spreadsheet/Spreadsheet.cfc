@@ -1757,23 +1757,18 @@
 		<cfargument name="sheetName" type="string" required="false" />
 		<cfargument name="sheetIndex" type="numeric" required="false" Hint="Sheet position (1-based)"/>
 		
-		<cfif not StructKeyExists(arguments, "sheetName") and not StructKeyExists(arguments, "sheetIndex")>
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-						message="Missing Required Argument" 
-						detail="Either sheetName or sheetIndex must be provided" />
-		</cfif>
-		<cfif StructKeyExists(arguments, "sheetName") and StructKeyExists(arguments, "sheetIndex")>
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-						message="Too Many Arguments" 
-						detail="Only one argument is allowed. Specify either a SheetName or SheetIndex, not both" />
-		</cfif>
+		<cfset validateSheetNameOrIndexWasProvided( argumentCollection=arguments ) />
 
 		<!--- convert the name to a 1-based sheet index --->
 		<cfif StructKeyExists(arguments, "sheetName")>
 			<cfset arguments.sheetIndex = getWorkBook().getSheetIndex( javaCast("string", arguments.sheetName) ) + 1 />
 		</cfif>
 		
-		<cfif arguments.sheetIndex gt 0 and arguments.sheetIndex lte getWorkBook().getNumberOfSheets()>
+		<!--- the position is valid if it an integer between 1 and the total number of sheets in the workbook --->
+		<cfif arguments.sheetIndex gt 0 
+					and arguments.sheetIndex eq round(arguments.sheetIndex)
+					and arguments.sheetIndex lte getWorkBook().getNumberOfSheets() >
+
 			<cfreturn true />
 		</cfif>	
 			
@@ -1803,55 +1798,109 @@
 		<cfreturn newWorkBook />
 	</cffunction>
 
-	<cffunction name="createSheet" access="private" output="false" returntype="void"
-				Hint="Adds a new WorkSheet to the current spreadsheet. Throws an error if the Sheet name already exists">
-		<cfargument name="sheetName" type="string" required="true" Hint="Name of the new sheet" />							
-		<cfargument name="sheet" type="numeric" required="false" Hint="Insert the new sheet at this position" />							
+	<!--- TODO: Validate sheet names for bad characters --->
+	<cffunction name="createSheet" access="public" output="true" returntype="any"
+				Hint="Adds a new Sheet to the current workbook and returns it. Throws an error if the Sheet name is invalid or already exists">
+		<cfargument name="sheetName" type="string" required="false" Hint="Name of the new sheet" />							
+	
+		<cfset Local.newSheetName = 0 />
 		
-		<!--- Make sure the sheet name isn't in already in use --->		
-		<cfset var sheetPosition = getWorkBook().getSheetIndex( arguments.sheetName ) + 1 />
-		<cfif sheetPosition gt 0>
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+		<cfif structKeyExists(arguments, "sheetName")>
+			<cfset Local.newSheetName = arguments.sheetName />
+		<cfelse>
+		    <!--- just generate a sheet name automatically --->
+			<cfset Local.newSheetName = generateUniqueSheetName() />
+		</cfif>
+
+		<!--- Make sure the sheet name isn't in already in use --->	
+		<cfif sheetExists( sheetName=Local.newSheetName )>
+				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 						message="Invalid Sheet Name" 
 						detail="The Workbook already contains a sheet named [#arguments.sheetName#]" />
-		
 		</cfif>
 
-		<!--- Go ahead and create the new sheet --->
-		<cfset getWorkBook().createSheet( javaCast("String", arguments.sheetName) ) />
+		<!--- Otherwise, go ahead and create the new sheet --->
+		<cfreturn getWorkBook().createSheet( javaCast("String", Local.newSheetName) ) />
 
-		<!--- With existing workbooks, we may want to move the new sheet to a specific position --->
-		<cfif structKeyExists(arguments, "sheet")>
-			<cfset moveSheet( arguments.sheetName, arguments.sheet ) />
-		</cfif>
 	</cffunction>
 
-	<cffunction name="moveSheet" access="private" output="false" returntype="void"
+	<!--- The reason we need this function is because POI does not verify sheet 
+		names are unique when you call createSheet() without a sheet name. Also POI's 
+		sheet names	are 0-based. For ACF compatibility they should be 1-based (ie Sheet1 versus Sheet0 ) --->
+	<cffunction name="generateUniqueSheetName" access="public" output="false" returntype="string"
+				hint="Generates a unique sheet name (Sheet1, Sheet2, etecetera).">
+		
+		<cfset Local.startNum  		= getWorkBook().getNumberOfSheets() + 1 />
+		<cfset Local.maxRetry  		= Local.startNum + 250 />
+
+		<!--- Try and generate a unique sheet name using the convetion: Sheet1, Sheet2, SheetX ... --->
+		<cfloop from="#Local.startNum#" to="#Local.maxRetry#" index="Local.sheetNum">
+
+			<cfset Local.proposedName = "Sheet"& Local.sheetNum />
+			<!--- we found an available sheet name --->
+			<cfif getWorkBook().getSheetIndex( Local.proposedName ) lt 0>
+				<cfreturn Local.proposedName />
+			</cfif>
+
+		</cfloop>
+		
+		<!--- this should never happen. but if for some reason it did, 
+			warn the action failed and abort ... --->
+		<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+				message="Unable to generate name" 
+				detail="Unable to generate a unique sheet name" />				
+	</cffunction>
+	
+	<cffunction name="moveSheet" access="public" output="false" returntype="void"
 				Hint="Moves a Sheet Name to the given position">
 		<cfargument name="sheetName" type="string" required="true" Hint="Name of the sheet to move" />							
 		<cfargument name="sheet" type="numeric" required="true" Hint="Move the sheet to this position" />
 
-		<cfset var sheetCount  	= getWorkBook().getNumberOfSheets() />
-		<cfset var sheetIndex 	= arguments.sheet - 1 />
-		
-		<cfif getWorkBook().getSheetIndex( arguments.sheetName ) lt 0>
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-						message="Invalid Sheet Name" 
-						detail="This workbook does not contain a sheet named [#arguments.sheetName#]" />
-		</cfif>
+	
+		<!--- First make sure the sheet exists and the target position is within range --->
+		<cfset validateSheetName( sheetName=arguments.sheetName ) />
+		<cfset validateSheetIndex( sheetIndex=arguments.sheet ) />
 
-		<!--- Make sure the sheet position isn't out of range --->
-		<cfif (sheetIndex lt 0) OR (sheetIndex gt sheetCount)>
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-						message="Invalid Sheet Index (#arguments.sheet#)" 
-						detail="The index must be a whole number greater than 0 and cannot exceed the number of sheets in this workbook ie [#sheetCount#]" />
-		</cfif>
-
-
+		<cfset Local.moveToIndex = arguments.sheet - 1 />
 		<cfset getWorkBook().setSheetOrder( javaCast("String", arguments.sheetName),
-											   javaCast("int", sheetIndex) ) />
+											javaCast("int", Local.moveToIndex) ) />
 	</cffunction>
 		
+	<cffunction name="removeSheet" access="public" output="true" returntype="void"
+				Hint="Removes the requested sheet. Throws an error if the sheet name or index is invalid -OR- if it is the last sheet in the workbook.">
+		<cfargument name="sheetName" type="string" required="false" Hint="Name of the sheet to remove" />							
+		<cfargument name="sheetIndex" type="numeric" required="false" Hint="Position of the sheet to remove" />							
+	
+		<cfset Local.removeSheetIndex 	 = -1 />
+		
+		<!--- First at least one of the arguments was supplied ... --->
+		<cfset validateSheetNameOrIndexWasProvided( argumentCollection=arguments ) />
+		
+		<!--- If the arguments are valid, calculate the sheet's index (base-0) --->
+		<cfif structKeyExists(arguments, "sheetName")>
+			<cfset validateSheetName( arguments.sheetName ) />
+			<cfset Local.removeSheetIndex = getWorkBook().getSheetIndex( sheetName ) />
+		</cfif>
+
+		<cfif structKeyExists(arguments, "sheetIndex")>
+			<cfset validateSheetIndex( arguments.sheetIndex ) />
+			<cfset Local.removeSheetIndex = arguments.sheetIndex - 1 />			
+		</cfif>
+		
+		<!--- Do not allow all of the sheets to be deleted, or the component will not function properly --->			
+		<cfif getWorkBook().getNumberOfSheets() lte 1>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+					message="Invalid Action" 
+					detail="Workbooks must always contain at least one sheet." />
+		</cfif>
+
+		<!--- NOTE: If this sheet is currently active/selected POI automatically activates/selects 
+			another sheet. Either the next sheet OR the last sheet in the workbook. 
+			--->
+		<cfreturn getWorkBook().removeSheetAt( javaCast("int", Local.removeSheetIndex ) ) />
+
+	</cffunction>
+
 	<cffunction name="readFromFile" access="private" output="false" returntype="any" 
 			hint="Reads a workbook file from disk and returns a POI HSSFWorkbook or XSSFWorkbook object.">
 		<!--- TODO: need to make sure this handles XSSF format; works with HSSF for now --->
@@ -1874,6 +1923,8 @@
 
 		<cfset inputStream.close() />
 		
+		<!--- TODO: Validate sheet name and index.  Should we warn of invalid values
+			instead of trying to silently handle them ... ? --->
 		<cfif StructKeyExists(arguments, "sheet")>
 			<cfset workbook.setActiveSheet(JavaCast("int", arguments.sheet - 1)) />
 		<cfelseif StructKeyExists(arguments, "sheetname")>
@@ -2441,5 +2492,52 @@
 				Hint="Returns stored cell utility object ie org.apache.poi.ss.util.CellUtil">
 		<cfreturn variables.cellUtil />
 	</cffunction>
+
+	<!--- COMMON VALIDATION FUNCTIONS --->
+	<!--- TODO: Incorporate into other existing functions --->
+	<cffunction name="validateSheetIndex" access="public" output="false" returntype="void"
+				Hint="Validates a (base-1) SheetIndex value. Throws an exception if the value is a) less than 1 b) greater than the number sheets in the workbook OR c) not an integer ">
+		<cfargument name="sheetIndex" type="numeric" required="true" Hint="Sheet position (base-1)" />
+
+		<cfif not sheetExists( sheetIndex=arguments.sheetIndex )>
+			<cfset Local.sheetCount = getWorkBook().getNumberOfSheets() />
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Sheet Index [#arguments.sheetIndex#]" 
+						detail="The SheetIndex must a whole number between 1 and the total number of sheets in the workbook [#Local.sheetCount#]" />
+		
+		</cfif>			
+	</cffunction>
+
+	<cffunction name="validateSheetName" access="public" output="false" returntype="void"
+				Hint="Validates a SheetName exists. Throws an exception if the SheetName is not found within this workbook.">
+		<cfargument name="sheetName" type="string" required="true" Hint="Name of the sheet to validate" />
+
+		<cfif not sheetExists( sheetName=arguments.sheetName )>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Sheet Name [#arguments.SheetName#]" 
+						detail="The requested sheet was not found in the current workbook." />
+			
+		</cfif>
+	</cffunction>
+
+	<cffunction name="validateSheetNameOrIndexWasProvided" access="public" output="false" returntype="void"
+				Hint="Validates either a SheetName or SheetIndex was supplied (not both).">
+		<cfargument name="sheetName" type="string" required="false" />
+		<cfargument name="sheetIndex" type="numeric" required="false" />
+	
+			
+		<cfif not StructKeyExists(arguments, "sheetName") and not StructKeyExists(arguments, "sheetIndex")>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Missing Required Argument" 
+						detail="Either sheetName or sheetIndex must be provided" />
+		</cfif>
+		
+		<cfif StructKeyExists(arguments, "sheetName") and StructKeyExists(arguments, "sheetIndex")>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Too Many Arguments" 
+						detail="Only one argument is allowed. Specify either a SheetName or SheetIndex, not both" />
+		</cfif>
+	</cffunction>
+		
 
 </cfcomponent>
