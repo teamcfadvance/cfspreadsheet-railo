@@ -1602,7 +1602,7 @@
 		<!--- Automatically create the cell if it does not exist, instead of throwing an error --->
 		<cfset Local.cell = initializeCell( row=arguments.row, column=arguments.column ) />
 		
-		<!--- TODO: need to worry about data types? doing everything as a string for now --->
+		<!--- TODO: need to worry about data types? doing everything as a string for now ---> 
 		<cfset Local.cell.setCellValue( JavaCast("string", arguments.cellValue) ) />
 	</cffunction>
 	
@@ -1811,7 +1811,7 @@
 	</cffunction>
 
 	<!--- TODO: Validate sheet names for bad characters --->
-	<cffunction name="createSheet" access="public" output="true" returntype="any"
+	<cffunction name="createSheet" access="public" output="false" returntype="any"
 				Hint="Adds a new Sheet to the current workbook and returns it. Throws an error if the Sheet name is invalid or already exists">
 		<cfargument name="sheetName" type="string" required="false" Hint="Name of the new sheet" />							
 	
@@ -1878,7 +1878,7 @@
 											javaCast("int", Local.moveToIndex) ) />
 	</cffunction>
 		
-	<cffunction name="removeSheet" access="public" output="true" returntype="void"
+	<cffunction name="removeSheet" access="public" output="false" returntype="void"
 				Hint="Removes the requested sheet. Throws an error if the sheet name or index is invalid -OR- if it is the last sheet in the workbook.">
 		<cfargument name="sheetName" type="string" required="false" Hint="Name of the sheet to remove" />							
 		<cfargument name="sheetIndex" type="numeric" required="false" Hint="Position of the sheet to remove" />							
@@ -1997,14 +1997,11 @@
 		<cfreturn newFont />
 	</cffunction>
 	
-	<cffunction name="buildCellStyle" access="private" output="false" returntype="any" 
+	<cffunction name="buildCellStyle" access="public" output="false" returntype="any" 
 			hint="Builds an HSSFCellStyle with settings provided in a struct">
 		<cfargument name="format" type="struct" required="true" />
 		
-		<!---Only some alignment types require the word "ALIGN" concatenated to them--->
-		<cfset var alignList = "left, right, center, justify, general, fill, center_selection" />
-		<cfset var nonAlignList = "vertical_top, vertical_bottom, vertical_center, vertical_justify" />
-		
+		<!--- TODO: Reuse styles --->
 		<cfset var cellStyle = getWorkbook().createCellStyle() />
 		<cfset var font = 0 />
 		<cfset var setting = 0 />
@@ -2092,6 +2089,10 @@
 
 				<cfcase value="fgcolor">
 					<cfset cellStyle.setFillForegroundColor(getColorIndex(StructFind(arguments.format, setting))) />
+					<!--- make sure we always apply a fill pattern or the color will not be visible --->
+					<cfif not structKeyExists(arguments, "fillpattern")>
+						<cfset cellStyle.setFillPattern(cellStyle.SOLID_FOREGROUND) />
+					</cfif>
 				</cfcase>
 				
 				<!--- TODO: CF 9 docs list "nofill" as opposed to "no_fill"; docs wrong? The rest match POI 
@@ -2209,215 +2210,23 @@
 		<cfreturn cellStyle />
 	</cffunction>
 	
-	<cffunction name="getColorIndex" access="public" output="false" returntype="numeric" 
+	<cffunction name="getColorIndex" access="private" output="false" returntype="numeric" 
 			hint="Returns the color index of a color string">
 		<cfargument name="colorName" type="string" required="true" />
 		
-		<cfset var colorIndex = 0 />
-		
-		<!--- Evaluate doesn't seem to work with instantiating nested java classes, hence the switch. 
-				And yes, each individual color is implemented as a nested class in HSSFColor. Joy. --->
-		<cfswitch expression="#UCase(arguments.colorName)#">
-			<cfcase value="AQUA">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$AQUA").index />
-			</cfcase>
-			
-			<cfcase value="AUTOMATIC">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$AUTOMATIC").index />
-			</cfcase>
-			
-			<cfcase value="BLACK">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BLACK").index />
-			</cfcase>
-			
-			<cfcase value="BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BLUE").index />
-			</cfcase>
-			
-			<cfcase value="BLUE_GREY">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BLUE_GREY").index />
-			</cfcase>
-			
-			<cfcase value="BRIGHT_GREEN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BRIGHT_GREEN").index />
-			</cfcase>
-			
-			<cfcase value="BROWN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$BROWN").index />
-			</cfcase>
-			
-			<cfcase value="CORAL">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$CORAL").index />
-			</cfcase>
-			
-			<cfcase value="CORNFLOWER_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$CORNFLOWER_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="DARK_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="DARK_GREEN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_GREEN").index />
-			</cfcase>
-			
-			<cfcase value="DARK_RED">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_RED").index />
-			</cfcase>
-			
-			<cfcase value="DARK_TEAL">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_TEAL").index />
-			</cfcase>
-			
-			<cfcase value="DARK_YELLOW">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$DARK_YELLOW").index />
-			</cfcase>
-			
-			<cfcase value="GOLD">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GOLD").index />
-			</cfcase>
-			
-			<cfcase value="GREEN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREEN").index />
-			</cfcase>
-			
-			<cfcase value="GREY_25_PERCENT">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_25_PERCENT").index />
-			</cfcase>
-			
-			<cfcase value="GREY_40_PERCENT">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_40_PERCENT").index />
-			</cfcase>
-			
-			<cfcase value="GREY_50_PERCENT">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_50_PERCENT").index />
-			</cfcase>
-			
-			<cfcase value="GREY_80_PERCENT">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$GREY_80_PERCENT").index />
-			</cfcase>
-			
-			<cfcase value="INDIGO">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$INDIGO").index />
-			</cfcase>
-			
-			<cfcase value="LAVENDER">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LAVENDER").index />
-			</cfcase>
-			
-			<cfcase value="LEMON_CHIFFON">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LEMON_CHIFFON").index />
-			</cfcase>
-			
-			<cfcase value="LIGHT_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="LIGHT_CORNFLOWER_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_CORNFLOWER_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="LIGHT_GREEN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_GREEN").index />
-			</cfcase>
-			
-			<cfcase value="LIGHT_ORANGE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_ORANGE").index />
-			</cfcase>
-			
-			<cfcase value="LIGHT_TURQUOISE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_TURQUOISE").index />
-			</cfcase>
-			
-			<cfcase value="LIGHT_YELLOW">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIGHT_YELLOW").index />
-			</cfcase>
-			
-			<cfcase value="LIME">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$LIME").index />
-			</cfcase>
-			
-			<cfcase value="MAROON">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$MAROON").index />
-			</cfcase>
-			
-			<cfcase value="OLIVE_GREEN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$OLIVE_GREEN").index />
-			</cfcase>
-			
-			<cfcase value="ORANGE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ORANGE").index />
-			</cfcase>
-			
-			<cfcase value="ORCHID">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ORCHID").index />
-			</cfcase>
-			
-			<cfcase value="PALE_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$PALE_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="PINK">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$PINK").index />
-			</cfcase>
-			
-			<cfcase value="PLUM">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$PLUM").index />
-			</cfcase>
-			
-			<cfcase value="RED">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$RED").index />
-			</cfcase>
-			
-			<cfcase value="ROSE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ROSE").index />
-			</cfcase>
-			
-			<cfcase value="ROYAL_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$ROYAL_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="SEA_GREEN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$SEA_GREEN").index />
-			</cfcase>
-			
-			<cfcase value="SKY_BLUE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$SKY_BLUE").index />
-			</cfcase>
-			
-			<cfcase value="TAN">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$TAN").index />
-			</cfcase>
-			
-			<cfcase value="TEAL">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$TEAL").index />
-			</cfcase>
-			
-			<cfcase value="TURQUOISE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$TURQUOISE").index />
-			</cfcase>
-			
-			<cfcase value="VIOLET">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$VIOLET").index />
-			</cfcase>
-			
-			<cfcase value="WHITE">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$WHITE").index />
-			</cfcase>
-			
-			<cfcase value="YELLOW">
-				<cfset colorIndex = loadPoi("org.apache.poi.hssf.util.HSSFColor$YELLOW").index />
-			</cfcase>
-			
-			<cfdefaultcase>
+		<cftry>
+			<!--- Note: Names must be in upper case and must match EXACTLY. No extra spaces ! --->
+			<cfset Local.findColor = trim( ucase(arguments.colorName) ) />
+			<cfset Local.IndexedColors = loadPOI("org.apache.poi.ss.usermodel.IndexedColors") />
+			<cfset Local.color	= Local.IndexedColors.valueOf( javacast("string", Local.findColor) ) />
+			<cfreturn Local.color.getIndex() />
+
+			<cfcatch type="java.lang.IllegalArgumentException">
 				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 							message="Invalid Color" 
 							detail="The color provided (#arguments.colorName#) is not valid." />
-			</cfdefaultcase>
-		</cfswitch>
-		
-		<cfreturn colorIndex />
+			</cfcatch>
+		</cftry>
 	</cffunction>
 	
 	<cffunction name="getJavaColorRGB" access="private" output="false" returntype="struct" 
