@@ -844,55 +844,73 @@
 			hint="Deletes the data from a row. Does not physically delete the row.">
 		<cfargument name="rowNum" type="numeric" required="true" />
 		
-		<cfif arguments.rowNum lte 0>
-			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-						message="Invalid Row Value" 
-						detail="The value for row must be greater than or equal to 1." />
+		<!--- If this is a valid row, remove it --->
+		<cfset Local.rowToDelete = arguments.rowNum - 1 />
+		<cfif Local.rowToDelete gte getFirstRowNum() and Local.rowToDelete lte getLastRowNum() > 
+			<cfset getActiveSheet().removeRow( getActiveSheet().getRow(JavaCast("int", Local.rowToDelete)) ) />
 		</cfif>
 		
-		<cfset getActiveSheet().removeRow(getActiveSheet().getRow(JavaCast("int", arguments.rowNum - 1))) />
 	</cffunction>
 	
 	<cffunction name="deleteRows" access="public" output="false" returntype="void" 
 			hint="Deletes a range of rows">
 		<cfargument name="range" type="string" required="true" />
 		
-		<cfset var rangeValue = 0 />
-		<cfset var rangeTest = "^[0-9]{1,}(-[0-9]{1,})?$">
-		<cfset var i = 0 />
+		<!--- Validate and extract the ranges. Range is a comma-delimited list of ranges, 
+			and each value can be either a single number or a range of numbers with a hyphen. --->
+		<cfset Local.allRanges 	= extractRanges( arguments.range ) />
+		<cfset Local.theRange 	= 0 />
+		<cfset Local.i 			= 0 />
 		
-		<!--- Range is a comma-delimited list of ranges, and each value can be either 
-				a single number or a range of numbers with a hyphen. --->
-		<cfloop list="#arguments.range#" index="rangeValue">
-			<cfif REFind(rangeTest, rangeValue) eq 0>
-				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-							message="Invalid Range Value" 
-							detail="The range value #rangeValue# is not valid." />
+		<cfloop array="#Local.allRanges#" index="Local.theRange">
+			<!--- single row number --->
+			<cfif Local.theRange.startAt eq Local.theRange.endAt>
+				<cfset deleteRow( Local.theRange.startAt ) />
 			<cfelse>
-				<cfif ListLen(rangeValue, "-") eq 2>
-					<cfloop index="i" from="#ListGetAt(rangeValue, 1, '-')#" to="#ListGetAt(rangeValue, 2, '-')#">
-						<cfset deleteRow(i) />
-					</cfloop>
-				<cfelse>
-					<cfset deleteRow(rangeValue) />
-				</cfif>
+				<!--- range of rows --->
+				<cfloop index="Local.i" from="#Local.theRange.startAt#" to="#Local.theRange.endAt#">
+					<cfset deleteRow( Local.i ) />
+				</cfloop>
 			</cfif>
 		</cfloop>
+		
 	</cffunction>
 
-	<!--- As mentioned in the POI API, when getLastRowNum() is 0 it could mean two things: 
-	      either the sheet has no rows =OR= the last populated row index is 0.We must call 
-	      getPhysicalNumberOfRows() to differentiate --->
-	<cffunction name="getNextEmptyRow" access="private" output="false" returntype="numeric"
-				Hint="Returns the index of the next empty row in the active sheet (0-based)"> 
-		
-		<!--- The sheet is emtpy. So start on the first row  --->
-		<cfif getActiveSheet().getLastRowNum() eq 0 AND getActiveSheet().getPhysicalNumberOfRows() eq 0>
-			<cfreturn 0 />
-		</cfif>    
-		<!--- Otherwise, increment the value of the last populated row --->
-		<cfreturn getActiveSheet().getLastRowNum() + 1 />
+	
+	<!--- Wrapper of POI's function. As mentioned in the POI API, when getLastRowNum() 
+		  returns 0 it could mean two things: either the sheet is emtpy =OR= the last
+		  populated row index is 0. We must call  getPhysicalNumberOfRows() to differentiate.
+		  Note: getFirstRowNum() seems behave the same way with respect to 0 --->
+	<cffunction name="getLastRowNum" access="public" output="false" returntype="numeric"
+				Hint="Returns the last row number in the current sheet (base-0). Returns -1 if the sheet is empty">
+
+		<cfset Local.lastRow = getActiveSheet().getLastRowNum() />
+		<!--- The sheet is empty. Return -1 instead of 0 --->
+		<cfif Local.lastRow eq 0 AND getActiveSheet().getPhysicalNumberOfRows() eq 0>
+			<cfset Local.lastRow = -1 />
+		</cfif>
+		    
+		<cfreturn Local.lastRow />
 	</cffunction>
+	
+	<cffunction name="getFirstRowNum" access="public" output="false" returntype="numeric"
+				Hint="Returns the index of the first row in the active sheet (0-based). Returns -1 if the sheet is empty"> 
+		
+		<cfset Local.firstRow = getActiveSheet().getFirstRowNum() />
+		<!--- The sheet is empty. Return -1 instead of 0 --->
+		<cfif Local.firstRow eq 0 AND getActiveSheet().getPhysicalNumberOfRows() eq 0>
+			<cfreturn -1 />
+		</cfif>
+		
+		<cfreturn Local.firstRow />
+	</cffunction>
+	
+	<cffunction name="getNextEmptyRow" access="public" output="false" returntype="numeric"
+				Hint="Returns the index of the next empty row in the active sheet (0-based)"> 
+
+		<cfreturn getLastRowNum() + 1 />
+	</cffunction>
+
 		
 	<cffunction name="shiftRows" access="public" output="false" returntype="void" 
 			hint="Shifts rows up (negative integer) or down (positive integer)">
@@ -932,28 +950,25 @@
 			hint="Sets various formatting values on multiple rows">
 		<cfargument name="format" type="struct" required="true" />
 		<cfargument name="range" type="string" required="true" />
-
-		<cfset var rangeValue = 0 />
-		<cfset var rangeTest = "^[0-9]{1,}(-[0-9]{1,})?$">
-		<cfset var i = 0 />
 		
-		<!--- Range is a comma-delimited list of ranges, and each value can be either 
-				a single number or a range of numbers with a hyphen. --->
-		<cfloop list="#arguments.range#" index="rangeValue">
-			<cfif REFind(rangeTest, rangeValue) eq 0>
-				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-							message="Invalid Range Value" 
-							detail="The range value #rangeValue# is not valid." />
+		<!--- Validate and extract the ranges. Range is a comma-delimited list of ranges, 
+			and each value can be either a single number or a range of numbers with a hyphen. --->
+		<cfset Local.allRanges 	= extractRanges( arguments.range ) />
+		<cfset Local.theRange 	= 0 />
+		<cfset Local.i 			= 0 />
+		
+		<cfloop array="#Local.allRanges#" index="Local.theRange">
+			<!--- single row number --->
+			<cfif Local.theRange.startAt eq Local.theRange.endAt>
+				<cfset formatRow( arguments.format, Local.theRange.startAt ) />
 			<cfelse>
-				<cfif ListLen(rangeValue, "-") eq 2>
-					<cfloop index="i" from="#ListGetAt(rangeValue, 1, '-')#" to="#ListGetAt(rangeValue, 2, '-')#">
-						<cfset formatRow(arguments.format, i) />
-					</cfloop>
-				<cfelse>
-					<cfset formatRow(arguments.format, rangeValue) />
-				</cfif>
+				<!--- range of rows --->
+				<cfloop index="Local.i" from="#Local.theRange.startAt#" to="#Local.theRange.endAt#">
+					<cfset formatRow( arguments.format, Local.i ) />
+				</cfloop>				
 			</cfif>
 		</cfloop>
+				
 	</cffunction>
 	
 	<cffunction name="setRowHeight" access="public" output="false" returntype="void" 
@@ -1087,28 +1102,25 @@
 	<cffunction name="deleteColumns" access="public" output="false" returntype="void" 
 			hint="Deletes a range of columns">
 		<cfargument name="range" type="string" required="true" />
+
+		<!--- Validate and extract the ranges. Range is a comma-delimited list of ranges, 
+			and each value can be either a single number or a range of numbers with a hyphen. --->
+		<cfset Local.allRanges 	= extractRanges( arguments.range ) />
+		<cfset Local.theRange 	= 0 />
+		<cfset Local.i 			= 0 />
 		
-		<cfset var rangeValue = 0 />
-		<cfset var rangeTest = "^[0-9]{1,}(-[0-9]{1,})?$">
-		<cfset var i = 0 />
-		
-		<!--- Range is a comma-delimited list of ranges, and each value can be either 
-				a single number or a range of numbers with a hyphen. --->
-		<cfloop list="#arguments.range#" index="rangeValue">
-			<cfif REFind(rangeTest, rangeValue) eq 0>
-				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-							message="Invalid Range Value" 
-							detail="The range value #rangeValue# is not valid." />
+		<cfloop array="#Local.allRanges#" index="Local.theRange">
+			<!--- single column number --->
+			<cfif Local.theRange.startAt eq Local.theRange.endAt>
+				<cfset deleteColumn( Local.theRange.startAt ) />
 			<cfelse>
-				<cfif ListLen(rangeValue, "-") eq 2>
-					<cfloop index="i" from="#ListGetAt(rangeValue, 1, '-')#" to="#ListGetAt(rangeValue, 2, '-')#">
-						<cfset deleteColumn(i) />
-					</cfloop>
-				<cfelse>
-					<cfset deleteColumn(rangeValue) />
-				</cfif>
+				<!--- range of columns --->
+				<cfloop index="Local.i" from="#Local.theRange.startAt#" to="#Local.theRange.endAt#">
+					<cfset deleteColumn( Local.i ) />
+				</cfloop>				
 			</cfif>
 		</cfloop>
+						
 	</cffunction>
 	
 	<cffunction name="shiftColumns" access="public" output="false" returntype="void" 
@@ -1858,8 +1870,8 @@
 
 	
 		<!--- First make sure the sheet exists and the target position is within range --->
-		<cfset validateSheetName( sheetName=arguments.sheetName ) />
-		<cfset validateSheetIndex( sheetIndex=arguments.sheet ) />
+		<cfset validateSheetName( arguments.sheetName ) />
+		<cfset validateSheetIndex( arguments.sheet ) />
 
 		<cfset Local.moveToIndex = arguments.sheet - 1 />
 		<cfset getWorkBook().setSheetOrder( javaCast("String", arguments.sheetName),
@@ -2197,7 +2209,7 @@
 		<cfreturn cellStyle />
 	</cffunction>
 	
-	<cffunction name="getColorIndex" access="private" output="false" returntype="numeric" 
+	<cffunction name="getColorIndex" access="public" output="false" returntype="numeric" 
 			hint="Returns the color index of a color string">
 		<cfargument name="colorName" type="string" required="true" />
 		
@@ -2539,5 +2551,39 @@
 		</cfif>
 	</cffunction>
 		
+	<!--- Range is a comma-delimited list of ranges, and each value can be either 
+			a single number or a range of numbers with a hyphen. Ignores any white space --->
+	<cffunction name="extractRanges" access="public" output="false" returntype="array"
+				Hint="Parses and validates a list of row/column numbers. Returns an array of structures with the keys: startAt, endAt">
+		<cfargument name="rangeList" type="string" required="true" />
+	
+		<cfset Local.range 	 	= 0 />
+		<cfset Local.elem		= 0 />
+		<cfset Local.parts		= 0 />
+		<cfset Local.rangeTest 	= "^[0-9]{1,}(-[0-9]{1,})?$" />
+		<cfset Local.allRanges 	= [] />
+	
+		<cfloop list="#arguments.rangeList#" index="Local.elem">
+			<!--- remove all white space first --->
+			<cfset Local.elem = reReplace(Local.elem, "[[:space:]]+", "", "all") />
+			
+			<cfif REFind(Local.rangeTest, Local.elem) gt 0>
+				<cfset Local.parts 	= listToArray(Local.elem, "-") />
+
+				<!--- if this is a single number, the start/endAt values are the same --->
+				<cfset Local.range 	= {} />
+				<cfset Local.range.startAt = Local.parts[ 1 ] />
+				<cfset Local.range.endAt   = Local.parts[ arrayLen(Local.parts) ] />
+				<cfset arrayAppend( Local.allRanges, Local.range ) />
+				
+			<cfelse>			
+				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+							message="Invalid Range Value" 
+							detail="The range value #Local.elem# is not valid." />
+			</cfif>
+		</cfloop>
+	
+		<cfreturn Local.allRanges />		
+	</cffunction>
 
 </cfcomponent>
