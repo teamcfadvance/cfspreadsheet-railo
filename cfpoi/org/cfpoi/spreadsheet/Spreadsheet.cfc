@@ -2554,7 +2554,7 @@
 	<!--- Range is a comma-delimited list of ranges, and each value can be either 
 			a single number or a range of numbers with a hyphen. Ignores any white space --->
 	<cffunction name="extractRanges" access="public" output="false" returntype="array"
-				Hint="Parses and validates a list of row/column numbers. Returns an array of structures with the keys: startAt, endAt">
+				Hint="Parses and validates a list of row/column numbers. Returns an array of structures with the keys: startAt, endAt ">
 		<cfargument name="rangeList" type="string" required="true" />
 	
 		<cfset Local.range 	 	= 0 />
