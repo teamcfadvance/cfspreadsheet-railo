@@ -788,11 +788,7 @@
 						message="Invalid Row Value" 
 						detail="The value for row must be greater than or equal to 1." />
 		</cfif>
-<<<<<<< HEAD
-		
-=======
 
->>>>>>> leigh-fork
 		<cfif StructKeyExists(arguments, "column") and arguments.column lte 0>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 						message="Invalid Column Value" 
@@ -820,10 +816,7 @@
 		<cfif StructKeyExists(arguments, "row")>
 			<cfset Local.rowNum = arguments.row - 1 />
 		<cfelse>
-<<<<<<< HEAD
-=======
 			<!--- If a row number was not supplied, move to the next empty row --->
->>>>>>> leigh-fork
 			<cfset Local.rowNum	= getNextEmptyRow() />
 		</cfif>
 
@@ -869,21 +862,10 @@
 		<cfset Local.theRange 	= 0 />
 		<cfset Local.i 			= 0 />
 		
-<<<<<<< HEAD
-		<!--- Range is a comma-delimited list of ranges, and each value can be either 
-				a single number or a range of numbers with a hyphen. Ignore any white space --->
-		<cfloop list="#arguments.range#" index="rangeValue">
-			<cfset rangeValue = reReplace(rangeValue, "[[:space:]]+", "", "all") />
-			<cfif REFind(rangeTest, rangeValue) eq 0>
-				<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
-							message="Invalid Range Value" 
-							detail="The range value #rangeValue# is not valid." />
-=======
 		<cfloop array="#Local.allRanges#" index="Local.theRange">
 			<!--- single row number --->
 			<cfif Local.theRange.startAt eq Local.theRange.endAt>
 				<cfset deleteRow( Local.theRange.startAt ) />
->>>>>>> leigh-fork
 			<cfelse>
 				<!--- range of rows --->
 				<cfloop index="Local.i" from="#Local.theRange.startAt#" to="#Local.theRange.endAt#">
@@ -1829,11 +1811,7 @@
 	</cffunction>
 
 	<!--- TODO: Validate sheet names for bad characters --->
-<<<<<<< HEAD
-	<cffunction name="createSheet" access="public" output="true" returntype="any"
-=======
 	<cffunction name="createSheet" access="public" output="false" returntype="any"
->>>>>>> leigh-fork
 				Hint="Adds a new Sheet to the current workbook and returns it. Throws an error if the Sheet name is invalid or already exists">
 		<cfargument name="sheetName" type="string" required="false" Hint="Name of the new sheet" />							
 	
@@ -1900,11 +1878,7 @@
 											javaCast("int", Local.moveToIndex) ) />
 	</cffunction>
 		
-<<<<<<< HEAD
-	<cffunction name="removeSheet" access="public" output="true" returntype="void"
-=======
 	<cffunction name="removeSheet" access="public" output="false" returntype="void"
->>>>>>> leigh-fork
 				Hint="Removes the requested sheet. Throws an error if the sheet name or index is invalid -OR- if it is the last sheet in the workbook.">
 		<cfargument name="sheetName" type="string" required="false" Hint="Name of the sheet to remove" />							
 		<cfargument name="sheetIndex" type="numeric" required="false" Hint="Position of the sheet to remove" />							
@@ -2386,8 +2360,6 @@
 		</cfif>
 	</cffunction>
 		
-<<<<<<< HEAD
-=======
 	<!--- Range is a comma-delimited list of ranges, and each value can be either 
 			a single number or a range of numbers with a hyphen. Ignores any white space --->
 	<cffunction name="extractRanges" access="public" output="false" returntype="array"
@@ -2422,6 +2394,5 @@
 	
 		<cfreturn Local.allRanges />		
 	</cffunction>
->>>>>>> leigh-fork
 
 </cfcomponent>
