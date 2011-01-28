@@ -13,8 +13,6 @@
 				detail="If a StartRow is specified, StartColumn is required." />
 	</cfif>
 			
-	<cfset Local.args = StructNew() />
-	
 	<cfset Local.args.data = arguments.data />
 	<cfset Local.args.delimiter = arguments.delimiter />
 	
