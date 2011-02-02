@@ -19,19 +19,19 @@ component displayname="extension provider" output="false" {
 	remote query function listApplications(){
 		var apps = queryNew('type,id,name,label,description,version,category,image,download,author,codename,video,support,documentation,forum,mailinglist,network,created');
 		var rootURL=getInfo().url;
-		var desc = "My CFPOI ext";
+		var desc = "cfspreadhsheet tag &amp; functions";
 		QueryAddRow(apps);
 		QuerySetCell(apps,'id','10EEC23A-0779-4068-9507A9C5ED4A8641');
 		QuerySetCell(apps,'name','CFPOI');
 		QuerySetCell(apps,'type','web');
-		QuerySetCell(apps,'label','CFPOI, a wrapper for the Apache POI Project.');
+		QuerySetCell(apps,'label','&lt;cfspreadhsheet/&gt; tag &amp; functions');
 		QuerySetCell(apps,'description',desc);
-		QuerySetCell(apps,'author','Ext by Andy Jarrett.<br/> CFPOI by Matt Woodward');
+		QuerySetCell(apps,'author','Ext by Andy Jarrett.<br/>CFPOI by Matt Woodward');
 		QuerySetCell(apps,'image','http://www.gstatic.com/codesite/ph/images/defaultlogo.png');
-		QuerySetCell(apps,'support','http://code.google.com/p/cfpoi/issues/list');
+		QuerySetCell(apps,'support','https://github.com/andyj/RailoExtensionProvider/issues');
 		QuerySetCell(apps,'documentation','http://code.google.com/p/cfpoi/w/list');
 		QuerySetCell(apps,'created',CreateDate(2009,2,24));
-		QuerySetCell(apps,'version',"v27");
+		QuerySetCell(apps,'version',"version 1 alpha");
 		QuerySetCell(apps,'category',"Application");
 		QuerySetCell(apps,'download','#instance.thisAddress#/cfpoi.zip');
 		//QuerySetCell(apps,'download','https://github.com/andyj/RailoExtensionProvider/blob/master/cfpoi.zip');
