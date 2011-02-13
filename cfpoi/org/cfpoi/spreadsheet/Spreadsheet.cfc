@@ -1208,11 +1208,39 @@
 		<cfargument name="format" type="struct" required="true" />
 		<cfargument name="row" type="numeric" required="true" />
 		<cfargument name="column" type="numeric" required="true" />
-
+		<cfargument name="cellStyle" type="any" required="false" Hint="Existing cellStyle to reusue" />
+		
 		<!--- Automatically create the cell if it does not exist, instead of throwing an error --->
 		<cfset Local.cell = initializeCell( arguments.row, arguments.column ) />
-		<cfset Local.cell.setCellStyle( buildCellStyle(arguments.format) ) />
+
+		<cfif structKeyExists(arguments, "cellStyle")>
+			<!--- reuse an existing style --->
+			<cfset Local.cell.setCellStyle( arguments.cellStyle ) />
+		<cfelse>
+			<!--- create a new style --->
+			<cfset Local.cell.setCellStyle( buildCellStyle(arguments.format) ) />
+		</cfif>
  	</cffunction>
+	
+	<cffunction name="formatCellRange" access="public" output="false" returntype="void" 
+			hint="Applies formatting to a contigous range of cells">
+		<cfargument name="format" type="struct" required="true" />
+		<cfargument name="startRow" type="numeric" required="true" />
+		<cfargument name="startColumn" type="numeric" required="true" />
+		<cfargument name="endRow" type="numeric" required="true" />
+		<cfargument name="endColumn" type="numeric" required="true" />
+		
+		<cfset Local.rowNum = 0 />
+		<cfset Local.colNum = 0 />
+		<cfset Local.style  = buildCellStyle(arguments.format) />
+		
+		<cfloop from="#arguments.startRow#" to="#arguments.endRow#" index="Local.rowNum">
+			<cfloop from="#arguments.startColumn#" to="#arguments.endColumn#" index="Local.colNum">
+				<cfset formatCell( arguments.format, Local.rowNum, Local.colNum, Local.style) />
+			</cfloop>		
+		</cfloop>
+
+	</cffunction>
 	
 	<cffunction name="formatColumn" access="public" output="false" returntype="void" 
 			hint="Sets various formatting values on a column">
