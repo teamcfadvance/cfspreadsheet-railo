@@ -673,8 +673,8 @@
 	
 	<cffunction name="setFooter" access="public" output="false" returntype="void" 
 			hint="Sets the footer values on the sheet">
-		<cfargument name="centerFooter" type="string" required="true" />
 		<cfargument name="leftFooter" type="string" required="true" />
+		<cfargument name="centerFooter" type="string" required="true" />
 		<cfargument name="rightFooter" type="string" required="true" />
 		
 		<cfif arguments.centerFooter neq "">
@@ -689,11 +689,12 @@
 			<cfset getActiveSheet().getFooter().setRight(JavaCast("string", arguments.rightFooter)) />
 		</cfif>
 	</cffunction>
+
 	
 	<cffunction name="setHeader" access="public" output="false" returntype="void" 
 			hint="Sets the header values on the sheet">
-		<cfargument name="centerHeader" type="string" required="true" />
 		<cfargument name="leftHeader" type="string" required="true" />
+		<cfargument name="centerHeader" type="string" required="true" />
 		<cfargument name="rightHeader" type="string" required="true" />
 		
 		<cfif arguments.centerHeader neq "">
@@ -1617,10 +1618,22 @@
 	<cffunction name="mergeCells" access="public" output="false" returntype="void" 
 			hint="Merges two or more cells">
 		<cfargument name="startRow" type="numeric" required="true" />
-		<cfargument name="startColumn" type="numeric" required="true" />
 		<cfargument name="endRow" type="numeric" required="true" />
+		<cfargument name="startColumn" type="numeric" required="true" />
 		<cfargument name="endColumn" type="numeric" required="true" />
 		
+		<cfif arguments.startRow lt 1 or arguments.startRow gt arguments.endRow>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+					message="Invalid StartRow or EndRow" 
+					detail="Row values must be greater than 0 and the StartRow cannot be greater than the EndRow." />
+		</cfif>
+		
+		<cfif arguments.startColumn lt 1 or arguments.startColumn gt arguments.endColumn>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+					message="Invalid StartColumn or EndColumn" 
+					detail="Column values must be greater than 0 and the StartColumn cannot be greater than the EndColumn." />
+		</cfif>
+				
 		<cfset var cellRangeAddress = loadPoi("org.apache.poi.ss.util.CellRangeAddress").init(JavaCast("int", arguments.startRow - 1), 
 																											JavaCast("int", arguments.endRow - 1), 
 																											JavaCast("int", arguments.startColumn - 1), 
@@ -1628,6 +1641,7 @@
 		
 		<cfset getActiveSheet().addMergedRegion(cellRangeAddress) />
 	</cffunction>
+
 
 	<!--- Retrieves the requested cell. Generates a user friendly error 
 		when an invalid cell position is specified --->
