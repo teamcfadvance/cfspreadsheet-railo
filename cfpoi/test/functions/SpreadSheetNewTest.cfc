@@ -6,6 +6,7 @@
 		<cfset assertEquals( this.defaultSheetName, Local.sheetName) />
 	</cffunction>		
 	
+	<!--- Test Issue #6  - SpreadsheetNew() sheetName Argument Does Nothing --->
 	<cffunction name="testUserSuppliedSheetName" access="public" returnType="void">
 		<cfset Local.expectedName 	= "The Foo.bar.baz - sheet $ name" />
 		<cfset Local.sheet = SpreadsheetNew( Local.expectedName ) />
