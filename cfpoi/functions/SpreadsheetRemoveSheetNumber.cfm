@@ -6,5 +6,5 @@
 	<cfargument name="spreadsheet" type="org.cfpoi.spreadsheet.Spreadsheet" required="true" />
 	<cfargument name="sheetNumber" type="numeric" required="true" hint="Remove the sheet at this position" />
 	
-	<cfset arguments.spreadsheet.removeSheet( sheetIndex=arguments.sheetNumber ) />
+	<cfset arguments.spreadsheet.deleteSheet( sheetIndex=arguments.sheetNumber ) />
 </cffunction>

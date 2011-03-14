@@ -20,7 +20,5 @@
 					detail="SpreadsheetWrite only supports the following arguments: SpreadSheet, FileName and Overwrite" />
 	</cfif>
 
-	<cfset arguments.workbook  = arguments.spreadsheet.getWorkBook() />
-	
 	<cfset arguments.spreadsheet.writeToFile( argumentCollection=arguments ) />
 </cffunction>

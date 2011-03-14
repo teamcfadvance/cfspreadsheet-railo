@@ -20,7 +20,7 @@
 	<!--- To avoid confusion with ACF's function, (which also 
 		accepts sheetName and sheet index) let's throw an error 
 		if too many arguments are supplied --->
-	<cfif structCount( arguments) gt 1>		
+	<cfif structCount( arguments ) gt 1>		
 		<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
 					message="Too Many Arguments" 
 					detail="SpreadsheetRead() only supports a 'src' argument" />
