@@ -114,18 +114,18 @@
 			<cfcase value="csv,tab,pipe">
 				<!--- For CSV/HTML format, output results to a temp file --->		
 				<cfset Local.outFile = GetTempFile( ExpandPath("."), "cfpoi") />
-				<cfset Local.exportUtil = loadPOI("org.cfsearching.poi.XLSToCSV").init( arguments.src, Local.outFile )/>
+				<cfset Local.exportUtil = loadPOI("org.cfsearching.poi.WorkbookExportFactory").createCSVExport( arguments.src, Local.outFile )/>
 				<cfset Local.exportUtil.setSeparator( Local.exportUtil[ UCASE(arguments.format) ] ) />
 			</cfcase>
 			
 			<cfcase value="html">
 				<!--- For CSV/HTML format, output results to a temp file --->		
 				<cfset Local.outFile = GetTempFile( ExpandPath("."), "cfpoi") />
-				<cfset Local.exportUtil = loadPOI("org.cfsearching.poi.XLSToSimpleHTML").init( arguments.src, Local.outFile )/>
+				<cfset Local.exportUtil = loadPOI("org.cfsearching.poi.WorkbookExportFactory").createSimpleHTMLExport( arguments.src, Local.outFile )/>
 			</cfcase>
 			
 			<cfcase value="query">
-				<cfset Local.exportUtil = loadPOI("org.cfsearching.poi.XLSToQuery").init( arguments.src, arguments.query )/>
+				<cfset Local.exportUtil = loadPOI("org.cfsearching.poi.WorkbookExportFactory").createQueryExport( arguments.src, arguments.query )/>
 				<cfset Local.exportUtil.setColumnNames( javacast("string", arguments.columnNames) ) />
 			</cfcase>
 			

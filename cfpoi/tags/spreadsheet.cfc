@@ -26,7 +26,8 @@
 		<cfargument name="hasEndTag" type="boolean" required="yes">
 		<cfargument name="parent" type="component" required="no" hint="the parent cfc custom tag, if there is one">
 		<cfset variables.hasEndTag = arguments.hasEndTag />
-		<cfset variables.parent = arguments.parent />		
+		<cfset variables.parent = arguments.parent />	
+		<cfset variables.ooxmlExtensions = "xlsx" />	
 	</cffunction>
 
 	<cffunction name="onStartTag" output="yes" returntype="boolean">
@@ -38,7 +39,9 @@
 		<cfset var index			= "" />
 		<cfset var spreadsheet		= "" />
 		<cfset var isModifyAction 	= ( listFindNoCase("write,update", getAttribute("action")) ? true : false ) />
-
+		<cfset var fileExtension	= "" />
+		<cfset var isXmlFormat		= "" />
+		
 		<!--- before we go any further, ensure the action is valid --->
 		<cfif not listFindNoCase("read,write,update", getAttribute("action"))>
 			<cfthrow type="application" message="Invalid or Missing Action Attribute"  detail="Valid actions are 'read', 'update', or 'write'." />
@@ -68,6 +71,10 @@
 		
 			<cfif not attributeExists("filename")>
 				<cfthrow type="application" message="Filename Attribute is Required"  detail="The 'filename' attribute must be provided for write and update actions" />
+			<cfelse>
+				<!--- use the file extension to determine if the format is ooxml --->
+				<cfset fileExtension = listLast( trim(attributes.filename), ".") />
+				<cfset isXmlFormat   = listFindNoCase(variables.ooxmlExtensions, fileExtension) ? true : false />
 			</cfif>
 			
 			<cfif attributeExists("query") and not ( structKeyExists(caller, attributes.query) and IsQuery( caller[attributes.query] ) )>
@@ -151,7 +158,7 @@
 				<!--- Write Query content --->
 				<cfelseif attributeExists("query")>
 						<cfset attributes.query = caller[attributes.query] />
-						<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init() />
+						<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init(useXmlFormat=isXmlFormat) />
 						<cfset spreadsheet.write(argumentcollection = attributes) />
 
 				</cfif>
@@ -181,7 +188,7 @@
 
 				<!--- If the workbook does not exist yet, this is just a simple 'write' --->
 				<cfif NOT FileExists( attributes.filepath )>
-					<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init() />
+					<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init(useXmlFormat=isXmlFormat) />
 					<cfset spreadsheet.write( argumentCollection=attributes ) />
 
 				<!--- Otherwise, read in the file and update it --->
