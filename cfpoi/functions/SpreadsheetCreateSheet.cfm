@@ -1,5 +1,5 @@
 <!--- TODO: Validate sheet names --->
-<cffunction name="SpreadsheetCreateSheet" returntype="void" output="true">
+<cffunction name="SpreadsheetCreateSheet" returntype="void" output="false">
 	<cfargument name="spreadsheet" type="org.cfpoi.spreadsheet.Spreadsheet" required="true" />
 	<cfargument name="sheetName" type="string" required="false" hint="Name of the new sheet" />
 

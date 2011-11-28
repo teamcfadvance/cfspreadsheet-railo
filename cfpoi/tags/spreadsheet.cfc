@@ -20,6 +20,7 @@
 		, sheetname : { required:false, type:"any", hint="Name of the sheet For the read action, you can specify sheet or sheetname. For write and update actions, the specified sheet is renamed according to the value you specify for sheetname." }
 		, sheetNameConflict: { required:false, type:"any", default="error", hint="Applies only to action 'Update'. Action to take if the requested sheetName alread exists. <ul><li><strong>Error:</strong> Stop processing and return an error</li><li><strong>Overwrite:</strong> Replace the existing sheet. All data within the sheet is deleted.</li></ul>" }
 		, readAllSheets: { required:false, type:"any", default="false", hint="Applies only to action 'Read'. If true, read all sheets in the workbook and ignore 'SheetName' and 'Sheet' values" }
+		, columnFormats: { required:false, type:"struct", hint="Applies only when using a query with action 'Write' or 'Update'. A structure of structures containing custom formats for one or more query columns" }
 	}>
 	
 	<cffunction name="init" output="no" returntype="void" hint="invoked after tag is constructed">
@@ -80,6 +81,11 @@
 			<cfif attributeExists("query") and not ( structKeyExists(caller, attributes.query) and IsQuery( caller[attributes.query] ) )>
 				<!--- not a valid query variable --->
 				<cfthrow type="application" message="Invalid 'Query' Attribute"  detail="The specified query [#attributes.query#] was not found or is not a query object" />
+			</cfif>
+
+			<cfif attributeExists("columnFormats") and not attributeExists("query")>
+				<!--- not a valid query variable --->
+				<cfthrow type="application" message="Invalid Attribute Combination"  detail="The 'columnFormats' attribute can only be used in conjunction with a 'query' object" />
 			</cfif>
 
 			<cfif attributeExists("name") and not structKeyExists(caller, attributes.name)>

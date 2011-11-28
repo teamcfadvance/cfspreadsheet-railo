@@ -4,6 +4,7 @@
 	<cfargument name="row" type="numeric" required="false" />
 	<cfargument name="column" type="numeric" required="false" />
 	<cfargument name="insert" type="boolean" default="true" />
+	<cfargument name="formats" type="struct" required="false" />
 	
 	<cfset var args = StructNew() />
 
@@ -15,6 +16,9 @@
 	</cfif>
 	<cfif StructKeyExists(arguments, "column")>
 		<cfset args.column = arguments.column />
+	</cfif>
+	<cfif StructKeyExists(arguments, "formats")>
+		<cfset args.formats = arguments.formats />
 	</cfif>
 	
 	<cfset arguments.spreadsheet.addRows(argumentcollection = args) />

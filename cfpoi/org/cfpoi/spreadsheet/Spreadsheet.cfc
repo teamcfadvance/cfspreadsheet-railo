@@ -2,6 +2,9 @@
 	displayname="Spreadsheet" 
 	output="false"  
 	hint="CFC wrapper for the Apache POI project's HSSF (xls) and XSSF (xlsx) classes">
+
+	<!--- define default cell formats for when populating a sheet from a query --->
+	<cfset variables.defaultFormats = { DATE = "m/d/yy", TIMESTAMP = "m/d/yy h:mm", TIME = "h:mm:ss" } />
 	
 	<cffunction name="loadPoi" access="private" output="false" returntype="any">
 		<cfargument name="javaclass" type="string" required="true" hint="I am the java class to be loaded" />
@@ -62,7 +65,7 @@
 			<cfset setActiveSheet( sheetName=arguments.sheetName ) />
 			
 		</cfif>
-
+		
 		<cfreturn this />
 	</cffunction>
 	
@@ -82,10 +85,6 @@
 		<cfargument name="sheetname" type="string" required="false" />
 		<cfargument name="excludeHeaderRow" type="boolean" default="false" />
 		<cfargument name="readAllSheets" type="boolean" default="false" />
-		<!--- 
-		<cfargument name="destination" type="string" required="false" />
-		<cfargument name="overwrite" type="boolean" default="false" />
-		--->
 
 		<cfset Local.returnVal 	= 0 />
 		<cfset Local.exportUtil = 0 />
@@ -186,7 +185,6 @@
 		
 	</cffunction>
 	
-	
 	<!--- Note: To better support ACF compatibility, Write() and update() functions are now separate. 
 		This is a departure from the base CFPOI project which uses a single function for both operations --->
 	<cffunction name="write" access="public" output="false" returntype="void" 
@@ -198,7 +196,9 @@
 		<cfargument name="password" type="string" required="false" />
 		<cfargument name="query" type="query" required="false" />
 		<cfargument name="sheetname" type="string" required="false" />
-
+		<cfargument name="columnFormats" type="struct" default="#structNew()#" />
+		<cfargument name="autoSizeColumns" type="boolean" default="false" />
+		
 		<!--- Some of this is a duplication of the existing tag validation --->
 		<cfif StructKeyExists(arguments, "query") and StructKeyExists(arguments, "format")>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
@@ -249,7 +249,7 @@
 
 		<!--- Handle query or CSV accordingly. --->
 		<cfif StructKeyExists(arguments, "query")>
-			<cfset addRows( arguments.query, 1, 1, false ) />
+			<cfset addRows( arguments.query, 1, 1, false, arguments.columnFormats, arguments.autoSizeColumns ) />
 			
 		<cfelseif structKeyExists(arguments, "name")>
 					
@@ -272,6 +272,8 @@
 		<cfargument name="query" type="query" required="false" />
 		<cfargument name="sheetname" type="string" required="false" />
 		<cfargument name="nameConflict" type="string" default="error" hint="Action to take if the sheetname already exists: overwrite or error (default)" />
+		<cfargument name="columnFormats" type="struct" default="#structNew()#" />
+		<cfargument name="autoSizeColumns" type="boolean" default="false" />
 		
 		<!--- remember the currently active sheet --->		
 		<cfset Local.activeSheetNum = getWorkBook().getActiveSheetIndex() + 1 />
@@ -283,7 +285,7 @@
 		<cfset setActiveSheet( sheetIndex=Local.sheetToActivate ) />
 		
 		<cfif structKeyExists(arguments, "query")>
-			<cfset addRows( arguments.query, 1, 1, false) />			
+			<cfset addRows( arguments.query, 1, 1, false, arguments.columnFormats, arguments.autoSizeColumns ) />			
 		<cfelseif structKeyExists(arguments, "format")>
 			<cfset addDelimitedRows( arguments.name ) />
 		</cfif>
@@ -472,7 +474,6 @@
 		</cfif> --->
 	</cffunction>
 
-	<!--- TODO: Add support for .xlsx format metadata --->
 	<cffunction name="getInfo" access="public" output="false" returntype="struct" 
 			hint="Returns a struct containing the standard properties for the workbook">
 		<!--- 
@@ -493,30 +494,14 @@
 			* SHEETNAMES
 			* SPREADSHEETTYPE
 		--->
-		<cfset Local.info 			= StructNew() />
-		<cfset Local.docSummaryInfo = getWorkbook().getDocumentSummaryInformation() />
-		<cfset Local.summaryInfo 	= getWorkbook().getSummaryInformation() />
-		<cfset Local.i 				= 0 />
-		
-		<cfset Local.info.author = Local.summaryInfo.getAuthor() />
-		<cfset Local.info.category = Local.docSummaryInfo.getCategory() />
-		<cfset Local.info.comments = Local.summaryInfo.getComments() />
-		<cfset Local.info.creationdate = Local.summaryInfo.getCreateDateTime() />
-		
-		<cfset Local.info.lastedited = Local.summaryInfo.getEditTime() />
-		<cfif Local.info.lastedited eq 0>
-			<cfset Local.info.lastedited = "" />
+		<!--- format specific metadata --->
+		<cfif isBinaryFormat()>
+			<cfset Local.info = getBinaryInfo() />
 		<cfelse>
-			<cfset Local.info.lastedited = CreateObject("java", "java.util.Date").init(JavaCast("long", Local.summaryInfo.getEditTime())) />
+			<cfset Local.info = getOOXMLInfo() />
 		</cfif>
 		
-		<cfset Local.info.lastauthor = Local.summaryInfo.getLastAuthor() />
-		<cfset Local.info.lastsaved = Local.summaryInfo.getLastSaveDateTime() />
-		<cfset Local.info.keywords = Local.summaryInfo.getKeywords() />
-		<cfset Local.info.manager = Local.docSummaryInfo.getManager() />
-		<cfset Local.info.company = Local.docSummaryInfo.getCompany() />
-		<cfset Local.info.subject = Local.summaryInfo.getSubject() />
-		<cfset Local.info.title = Local.summaryInfo.getTitle() />
+		<!--- common properties --->
 		<cfset Local.info.sheets = getWorkbook().getNumberOfSheets() />
 		<cfset Local.info.sheetnames = "" />
 		
@@ -537,59 +522,187 @@
 		<cfreturn Local.info />
 	</cffunction>
 	
-	<!--- TODO: Add support for .xlsx format metadata --->
+	<cffunction name="getOOXMLInfo" access="private" output="false" returntype="struct" 
+			hint="Returns a struct containing the standard properties for an OOXML workbook">
+				
+		<cfscript>
+			local.info 				= {};	
+			local.docProps			= getWorkbook().getProperties().getExtendedProperties().getUnderlyingProperties();
+			local.coreProps 		= getWorkbook().getProperties().getCoreProperties();
+
+			// ACF compatibility, ensure keys always exist
+			local.value				= local.coreProps.getCreator();
+		    local.info.author 		= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getCategory();
+		    local.info.category 	= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getDescription();
+		    local.info.comments 	= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getCreated();
+		    local.info.creationdate = isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getModified();
+		    local.info.lastedited   = isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getSubject();
+			local.info.subject 		= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getTitle();
+			local.info.title 		= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getUnderlyingProperties().getLastModifiedByProperty().getValue();
+		    local.info.lastauthor   = isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getKeywords();
+		    local.info.keywords 	= isNull(local.value) ?  "" : local.value;
+		    // TODO: Determine if lastSaved applies to ooxml
+			local.info.lastsaved    = "";
+			
+			local.value				= local.docProps.getManager();
+		    local.info.manager   	= isNull(local.value) ?  "" : local.value;
+			local.value				= local.docProps.getCompany();
+		    local.info.company   	= isNull(local.value) ?  "" : local.value;
+		    
+		    return local.info;
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="getBinaryInfo" access="private" output="false" returntype="struct" 
+			hint="Returns a struct containing the standard properties for a binary workbook">
+				
+		<cfscript>
+			local.info 				= {};	
+			local.docProps			= getWorkbook().getDocumentSummaryInformation();
+			local.coreProps 		= getWorkbook().getSummaryInformation();
+	
+			local.value				= local.coreProps.getAuthor();
+		    local.info.author 		= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getComments();
+		    local.info.comments 	= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getCreateDateTime();
+		    local.info.creationdate = isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getEditTime();
+			if (local.value neq 0) {
+				local.value			= CreateObject("java", "java.util.Date").init( local.value );
+			}				
+		    local.info.lastEdited   = local.value eq 0 ?  "" : local.value;
+			local.value				= local.coreProps.getSubject();
+			local.info.subject 		= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getTitle();
+			local.info.title 		= isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getLastAuthor();
+		    local.info.lastauthor   = isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getLastSaveDateTime();
+			local.info.lastsaved    = isNull(local.value) ?  "" : local.value;
+			local.value				= local.coreProps.getKeywords();
+		    local.info.keywords 	= isNull(local.value) ?  "" : local.value;
+	
+			local.value				= local.docProps.getManager();
+		    local.info.manager   	= isNull(local.value) ?  "" : local.value;
+			local.value				= local.docProps.getCompany();
+		    local.info.company   	= isNull(local.value) ?  "" : local.value;
+			local.value				= local.docProps.getCategory();
+		    local.info.category 	= isNull(local.value) ?  "" : local.value;
+		    
+		    return local.info;
+		</cfscript>
+	</cffunction>
+	
 	<cffunction name="addInfo" access="public" output="false" returntype="void" 
 			hint="Set standard properties on the workbook">
 		<cfargument name="props" type="struct" required="true" 
 				hint="Valid struct keys are author, category, lastauthor, comments, keywords, manager, company, subject, title" />
-		
-		<cfset var documentSummaryInfo = 0 />
-		<cfset var summaryInfo = 0 />
-		<cfset var filename = 0 />
 
-		<!--- Properties are automatically intialized in setWorkBook() and should always exist ---> 
-		<cfset documentSummaryInfo = getWorkbook().getDocumentSummaryInformation() />
-		<cfset summaryInfo = getWorkbook().getSummaryInformation() />
+		<cfif isBinaryFormat()>
+			<cfset addInfoBinary( arguments.props ) />
+		<cfelse>
+			<cfset addInfoOOXML( arguments.props ) />
+		</cfif>
+	</cffunction>
+	
+	<cffunction name="addInfoBinary" access="private" output="false" returntype="void" 
+			hint="Set standard properties on the workbook">
+		<cfargument name="props" type="struct" required="true" 
+				hint="Valid struct keys are author, category, lastauthor, comments, keywords, manager, company, subject, title" />
 		
-		<cfloop collection="#props#" item="prop">
-			<cfswitch expression="#prop#">
-				<cfcase value="author">
-					<cfset summaryInfo.setAuthor(JavaCast("string", arguments.props.author)) />
-				</cfcase>
-				
-				<cfcase value="category">
-					<cfset documentSummaryInfo.setCategory(JavaCast("string", arguments.props.category)) />
-				</cfcase>
-				
-				<cfcase value="lastauthor">
-					<cfset summaryInfo.setLastAuthor(JavaCast("string", arguments.props.lastauthor)) />
-				</cfcase>
-				
-				<cfcase value="comments">
-					<cfset summaryInfo.setComments(JavaCast("string", arguments.props.comments)) />	
-				</cfcase>
-				
-				<cfcase value="keywords">
-					<cfset summaryInfo.setKeywords(JavaCast("string", arguments.props.keywords)) />
-				</cfcase>
-				
-				<cfcase value="manager">
-					<cfset documentSummaryInfo.setManager(JavaCast("string", arguments.props.manager)) />
-				</cfcase>
-				
-				<cfcase value="company">
-					<cfset documentSummaryInfo.setCompany(JavaCast("string", arguments.props.company)) />
-				</cfcase>
-				
-				<cfcase value="subject">
-					<cfset summaryInfo.setSubject(JavaCast("string", arguments.props.subject)) />
-				</cfcase>
-				
-				<cfcase value="title">
-					<cfset summaryInfo.setTitle(JavaCast("string", arguments.props.title)) />
-				</cfcase>
-			</cfswitch>
-		</cfloop>
+		<!--- Properties are automatically intialized in setWorkBook() and should always exist ---> 
+		<cfset var documentSummaryInfo = getWorkbook().getDocumentSummaryInformation() />
+		<cfset var summaryInfo = getWorkbook().getSummaryInformation() />
+		<cfset var key = 0 />
+
+		<cfscript> 
+			for (var key in arguments.props) {
+				switch (key) {
+					case "author": 				
+						summaryInfo.setAuthor(JavaCast("string", arguments.props.author));
+						break;
+					case "category":
+						documentSummaryInfo.setCategory(JavaCast("string", arguments.props.category));
+						break;
+					case "lastauthor":
+						summaryInfo.setLastAuthor(JavaCast("string", arguments.props.lastauthor));
+						break;
+					case "comments":
+						summaryInfo.setComments(JavaCast("string", arguments.props.comments));	
+						break;
+					case "keywords":
+						summaryInfo.setKeywords(JavaCast("string", arguments.props.keywords));
+						break;
+					case "manager":
+						documentSummaryInfo.setManager(JavaCast("string", arguments.props.manager));
+						break;
+					case "company":
+						documentSummaryInfo.setCompany(JavaCast("string", arguments.props.company));
+						break;
+					case "subject":
+						summaryInfo.setSubject(JavaCast("string", arguments.props.subject));
+						break;
+					case "title":
+						summaryInfo.setTitle(JavaCast("string", arguments.props.title));
+						break;
+				}
+			}	
+		</cfscript>
+	</cffunction>
+
+	<cffunction name="addInfoOOXML" access="private" output="false" returntype="void" 
+			hint="Set standard properties on the workbook">
+		<cfargument name="props" type="struct" required="true" 
+				hint="Valid struct keys are author, category, lastauthor, comments, keywords, manager, company, subject, title" />
+		
+		<!--- Properties are automatically intialized in setWorkBook() and should always exist ---> 
+		<cfset var docProps  = getWorkbook().getProperties().getExtendedProperties().getUnderlyingProperties() />
+		<cfset var coreProps = getWorkbook().getProperties().getCoreProperties() />
+		<cfset var key  	 = 0 />
+		
+		<cfscript>
+			for (var key in arguments.props) {
+				switch (key) {
+					case "author": 				
+						coreProps.setCreator( JavaCast("string", arguments.props[key]) );
+						break;
+					case "category": 				
+						coreProps.setCategory( JavaCast("string", arguments.props[key]));
+						break;
+					case "lastauthor": 
+						// TODO: This does not seem to be working. Not sure why
+						coreProps.getUnderlyingProperties().setLastModifiedByProperty(JavaCast("string", arguments.props[key]));
+						break;
+					case "comments": 				
+						coreProps.setDescription(JavaCast("string", arguments.props[key]));	
+						break;
+					case "keywords": 				
+						coreProps.setKeywords(JavaCast("string", arguments.props[key]));
+						break;
+					case "subject": 				
+						coreProps.setSubjectProperty(JavaCast("string", arguments.props[key]));
+						break;
+					case "title": 				
+						coreProps.setTitle(JavaCast("string", arguments.props[key]));
+						break;
+					case "manager": 	
+						docProps.setManager(JavaCast("string", arguments.props[key]));
+						break;
+					case "company": 				
+						docProps.setCompany(JavaCast("string", arguments.props[key]));
+						break;
+				}
+			}
+		</cfscript>
 	</cffunction>
 	
 	<cffunction name="readBinary" access="public" output="false" returntype="binary" 
@@ -712,6 +825,8 @@
 		<cfargument name="row" type="numeric" required="false" />
 		<cfargument name="column" type="numeric" default="1" />
 		<cfargument name="insert" type="boolean" default="true" />
+		<cfargument name="formats" type="struct" default="#structNew()#" hint="Column format properties [key: columnName, value: format structure]" />
+		<cfargument name="autoSizeColumns" type="boolean" default="false" />
 		
 		<cfif StructKeyExists(arguments, "row") and arguments.row lte 0>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
@@ -735,9 +850,10 @@
 			<!--- shift the existing rows down  --->
 			<cfif arguments.insert> 
 				<cfset shiftRows( arguments.row, Local.lastRow, arguments.data.recordCount ) />
-			<!--- otherwise, clear the entire row --->
+			<!--- do not clear the entire row because would erase all existing styles too
 			<cfelse>
 				<cfset deleteRow( arguments.row ) /> 
+			---> 
 			</cfif>
 
 		</cfif>
@@ -749,25 +865,84 @@
 			<!--- If a row number was not supplied, move to the next empty row --->
 			<cfset Local.rowNum	= getNextEmptyRow() />
 		</cfif>
-
 		
+		<!--- get the column names and formatting information --->
+		<cfset Local.queryColumns = getQueryColumnFormats(arguments.data, arguments.formats) />
+		<cfset Local.dateUtil	  = loadPOI("org.apache.poi.ss.usermodel.DateUtil") />
+
 		<cfloop query="arguments.data">
 			<!--- can't just call addRow() here since that function expects a comma-delimited 
 					list of data (probably not the greatest limitation ...) and the query 
 					data may have commas in it, so this is a bit redundant with the addRow() 
 					function --->
-			<cfset Local.theRow = createRow( Local.rowNum ) />
+			<cfset Local.theRow = createRow( Local.rowNum, false ) />
 			<cfset Local.cellNum = arguments.column - 1 />
 			
-			<!--- TODO: treating all data as strings; need to support data types? --->
-			<cfloop list="#arguments.data.ColumnList#" index="Local.colName">
-				<cfset Local.cell = createCell( Local.theRow, Local.cellNum ) />
-				<cfset Local.cell.setCellValue( JavaCast("string", arguments.data[Local.colName][arguments.data.CurrentRow]) ) />
+			<!---
+				Note: To properly apply date/number formatting:
+   				- cell type must be CELL_TYPE_NUMERIC
+   				- cell value must be applied as a java.util.Date or java.lang.Double (NOT as a string)
+   				- cell style must have a dataFormat (datetime values only)
+			--->					
+			<!--- populate all columns in the row --->	
+			<cfloop array="#Local.queryColumns#" index="Local.column">
+				<cfset Local.cell 	= createCell( Local.theRow, Local.cellNum, false ) />
+				<cfset Local.value 	= arguments.data[Local.column.name][arguments.data.currentRow] />
+				<cfset Local.forceDefaultStyle = false />
+
+				<!--- Cast the values to the correct type, so data formatting is properly applied --->
+				<cfif Local.column.cellDataType EQ "DOUBLE" AND IsNumeric(Local.value)>
+					<cfset Local.cell.setCellValue( JavaCast("double", val(Local.value) ) ) />
+				<cfelseif Local.column.cellDataType EQ "TIME" AND IsDate(Local.value)>
+					<cfset Local.value = timeFormat(parseDateTime(Local.value), "HH:MM:SS") />>					
+					<cfset Local.cell.setCellValue( Local.dateUtil.convertTime(Local.value) ) />
+						<cfset Local.forceDefaultStyle = true />
+				<cfelseif Local.column.cellDataType EQ "DATE" AND IsDate(Local.value)>
+					<!--- If the cell is NOT already formatted for dates, apply the default format --->
+					<!--- brand new cells have a styleIndex == 0 --->
+					<cfset Local.styleIndex = Local.cell.getCellStyle().getDataFormat() />
+					<cfset Local.styleFormat = Local.cell.getCellStyle().getDataFormatString() />
+					<cfif Local.styleIndex EQ 0 OR NOT Local.dateUtil.isADateFormat(Local.styleIndex, Local.styleFormat)>
+						<cfset Local.forceDefaultStyle = true />
+					</cfif>
+					<cfset Local.cell.setCellValue( parseDateTime(Local.value) ) />
+				<cfelseif Local.column.cellDataType EQ "BOOLEAN" AND IsBoolean(Local.value)>
+					<cfset Local.cell.setCellValue( JavaCast("boolean", Local.value ) ) />
+				<cfelseif IsSimpleValue(Local.value) AND NOT Len(Local.value)>
+					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_BLANK ) />
+				<cfelse>
+					<cfset Local.cell.setCellValue( JavaCast("string", Local.value ) ) />
+				</cfif>
+
+				<!--- Replace the existing styles with custom formatting --->
+				<cfif structKeyExists(Local.column, "customCellStyle")>
+					<cfset Local.cell.setCellStyle( Local.column.customCellStyle ) />
+				<!--- Replace the existing styles with default formatting (for readability). The reason we cannot 
+					just update the cell's style is because they are shared. So modifying it may impact more than 
+					just this one cell. 
+					--->				
+				<cfelseif structKeyExists(Local.column, "defaultCellStyle") AND Local.forceDefaultStyle>
+					<cfset Local.cell.setCellStyle( Local.column.defaultCellStyle ) />
+				</cfif>
+
 				<cfset Local.cellNum = Local.cellNum + 1 />
 			</cfloop>
-
+			
 			<cfset Local.rowNum = Local.rowNum + 1 />
 		</cfloop>
+
+		<!--- adjust column sizes to fit content. note: this method uses Java2D classes that throw 
+			exception if graphical environment is not available. If a graphical environment is not 
+			available, you must must run in headless mode ie java.awt.headless=true --->
+		<cfif arguments.autoSizeColumns and arguments.data.recordCount>
+			<cfset Local.startColumn = arguments.column - 1 />
+			<cfset Local.endColumn = Local.startColumn + arrayLen(Local.queryColumns) - 1 />
+			<cfloop from="#Local.startColumn#" to="#Local.endColumn#" index="Local.index">
+				resizing [#Local.index#]<br>
+				<cfset getActiveSheet().autoSizeColumn( javacast("int", Local.index) ) />
+			</cfloop>	
+		</cfif>
+
 	</cffunction>
 	
 	<cffunction name="addDelimitedRows" access="public" output="false" returntype="void" 
@@ -1161,6 +1336,41 @@
 		</cfif>
  	</cffunction>
 	
+	<cffunction name="clearCellRange" access="public" output="false" returntype="void" 
+			hint="Clears the specified cell range of all styles and values">
+		<cfargument name="startRow" type="numeric" required="true" />
+		<cfargument name="startColumn" type="numeric" required="true" />
+		<cfargument name="endRow" type="numeric" required="true" />
+		<cfargument name="endColumn" type="numeric" required="true" />
+		
+		<cfset Local.rowNum = 0 />
+		<cfset Local.colNum = 0 />
+		
+		<cfloop from="#arguments.startRow#" to="#arguments.endRow#" index="Local.rowNum">
+			<cfloop from="#arguments.startColumn#" to="#arguments.endColumn#" index="Local.colNum">
+				<cfset clearCell( Local.rowNum, Local.colNum ) />
+			</cfloop>		
+		</cfloop>
+
+	</cffunction>
+
+	<cffunction name="clearCell" access="public" output="false" returntype="void" 
+			hint="Clears the specified cell of all styles and values">
+		<cfargument name="row" type="numeric" required="true" />
+		<cfargument name="column" type="numeric" required="true" />
+		
+		<cfset Local.defaultStyle  = getWorkBook().getCellStyleAt( javacast("short", 0) ) />
+		<cfset Local.rowObj	 =  getWorkBook().getRow( javaCast("int", arguments.row - 1)) />
+
+		<cfif not IsNull(Local.rowObj)>
+			<cfset Local.cell =  Local.rowObj.getCell( javaCast("int", arguments.column - 1) ) />
+			<cfif not IsNull(Local.cell)>
+				<cfset Local.cell.setCellStyle( Local.defaultStyle ) />
+				<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_BLANK ) />
+			</cfif>		
+		</cfif>
+	</cffunction>
+
 	<cffunction name="formatCellRange" access="public" output="false" returntype="void" 
 			hint="Applies formatting to a contigous range of cells">
 		<cfargument name="format" type="struct" required="true" />
@@ -1326,7 +1536,7 @@
 
 		<cfif StructKeyExists(arguments.comment, "anchor")>
 			<cfset clientAnchor = loadPoi("org.apache.poi.hssf.usermodel.HSSFClientAnchor").init(JavaCast("int", 0), 
-																													JavaCast("int", 0), 
+																												JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", 0), 
 																													JavaCast("int", ListGetAt(arguments.comment.anchor, 1)), 
@@ -1682,6 +1892,7 @@
 	<cffunction name="createRow" access="public" output="false" returntype="any" 
 			hint="Creates a new row in the sheet and returns the row">
 		<cfargument name="rowNum" type="numeric" required="false" />
+		<cfargument name="overwrite" type="boolean" default="true" />
 		
 		<!--- if rowNum is provided and is lte the last row number, 
 				need to shift existing rows down by 1 --->
@@ -1697,7 +1908,19 @@
 			</cfif> --->
 		</cfif>
 		
-		<cfreturn getActiveSheet().createRow(JavaCast("int", arguments.rowNum)) />
+		<!--- get existing row (if any) --->
+		<cfset Local.row = getActiveSheet().getRow(JavaCast("int", arguments.rowNum)) />
+		
+		<cfif arguments.overwrite and not IsNull(Local.row)>
+			<!--- forcibly remove existing row and all cells --->
+			<cfset getActiveSheet().removeRow( Local.row) />
+		</cfif>
+
+		<cfif arguments.overwrite OR IsNull(getActiveSheet().getRow(JavaCast("int", arguments.rowNum)))>
+			<cfset Local.row = getActiveSheet().createRow(JavaCast("int", arguments.rowNum)) />
+		</cfif>
+
+		<cfreturn Local.row />
 	</cffunction>
 	
 	<!--- TODO: POI supports setting the cell type when the cell is created. Need to worry about this? --->
@@ -1705,12 +1928,26 @@
 		hint="Creates a new cell in a row and returns the cell">
 		<cfargument name="row" type="any" required="true" />
 		<cfargument name="cellNum" type="numeric" required="false" />
+		<cfargument name="overwrite" type="boolean" default="true" />
 		
 		<cfif not StructKeyExists(arguments, "cellNum")>
 			<cfset arguments.cellNum = arguments.row.getLastCellNum() />
 		</cfif>
 		
-		<cfreturn arguments.row.createCell(JavaCast("int", arguments.cellNum)) />
+		<!--- get existing cell (if any) --->
+		<cfset Local.cell = arguments.row.getCell(JavaCast("int", arguments.cellNum)) />
+
+		<cfif arguments.overwrite AND NOT IsNull(Local.cell)>
+			<!--- forcibly remove the existing cell --->
+			<cfset arguments.row.removeCell( Local.cell ) />
+		</cfif>
+
+		<cfif arguments.overwrite OR IsNull( Local.cell )>
+			<!--- create a brand new cell --->
+			<cfset Local.cell = arguments.row.createCell(JavaCast("int", arguments.cellNum)) />
+		</cfif>
+		
+		<cfreturn Local.cell />
 	</cffunction>
 	
 	<!--- GET/SET FUNCTIONS FOR INTERNAL USE AND USING THIS CFC WITHOUT THE CORRESPONDING CUSTOM TAG --->
@@ -2063,9 +2300,11 @@
 		
 		<!--- TODO: Reuse styles --->
 		<cfset var cellStyle = getWorkbook().createCellStyle() />
+		<cfset var formatter = getWorkbook().getCreationHelper().createDataFormat() />
 		<cfset var font = 0 />
 		<cfset var setting = 0 />
 		<cfset var settingValue = 0 />
+		<cfset var formatIndex = 0 />
 		
 		<!---
 			Valid values of the format struct are:
@@ -2144,7 +2383,7 @@
 							doesn't seem to have any effect on the cell. Could be that I'm testing 
 							with OpenOffice so I'll have to check things in MS Excel --->
 				<cfcase value="dataformat">
-					<cfset cellStyle.setDataFormat(loadPoi("org.apache.poi.hssf.usermodel.HSSFDataFormat").getBuiltinFormat(JavaCast("string", StructFind(arguments.format, setting)))) />
+					<cfset cellStyle.setDataFormat(formatter.getFormat(JavaCast("string", arguments.format[setting]))) />
 				</cfcase>
 
 				<cfcase value="fgcolor">
@@ -2317,10 +2556,11 @@
 		<!--- initialize object if needed --->					
 		<cfif not structKeyExists(variables, "cellUtil")>
 			<cfset variables.cellUtil = loadPOI("org.apache.poi.ss.util.CellUtil") />
-		</cfif>					
+		</cfif>		
+					
 		<cfreturn variables.cellUtil />
 	</cffunction>
-
+	
 	<cffunction name="getFormatter" access="private" output="false" returntype="any"
 				Hint="Returns cell formatting utility object ie org.apache.poi.ss.usermodel.DataFormatter">
 
@@ -2341,6 +2581,60 @@
 		<cfreturn variables.formulaEvaluator />
 	</cffunction>
 
+	<cffunction name="getQueryColumnFormats" access="private" output="false" returntype="array">
+		<cfargument name="query" type="query" required="true">
+		<cfargument name="formats" type="struct" default="#structNew()#">
+		
+		<!--- extract the query columns and data types --->
+		<cfset Local.cell	  	= loadPOI("org.apache.poi.ss.usermodel.Cell") />
+		<cfset Local.formatter	= getWorkbook().getCreationHelper().createDataFormat() />
+		<cfset Local.metadata 	= getMetaData(arguments.query) />
+
+		<!--- assign default formats based on the data type of each column --->
+		<cfloop array="#Local.metadata#" index="Local.col">
+
+			<cfswitch expression="#Local.col.typeName#">
+				<!--- apply basic formatting to dates and times for increased readability --->
+				<cfcase value="DATE,TIMESTAMP">
+					<cfset Local.col.cellDataType 		= "DATE" />
+					<cfset Local.col.defaultCellStyle 	= buildCellStyle( {dataFormat = variables.defaultFormats[ Local.col.typeName ]} ) />
+				</cfcase>
+				<cfcase value="TIME">
+					<cfset Local.col.cellDataType 		= "TIME" />
+					<cfset Local.col.defaultCellStyle 	= buildCellStyle( {dataFormat = variables.defaultFormats[ Local.col.typeName ]} ) />
+				</cfcase>
+				<!--- Note: Excel only supports "double" for numbers. Casting very large DECIMIAL/NUMERIC
+				    or BIGINT values to double may result in a loss of precision or conversion to 
+					NEGATIVE_INFINITY / POSITIVE_INFINITY. --->
+				<cfcase value="DECIMAL,BIGINT,NUMERIC,DOUBLE,FLOAT,INTEGER,REAL,SMALLINT,TINYINT">
+					<cfset Local.col.cellDataType = "DOUBLE" />
+				</cfcase>
+				<cfcase value="BOOLEAN,BIT">
+					<cfset Local.col.cellDataType = "BOOLEAN" />
+				</cfcase>
+				<cfdefaultcase>
+					<cfset Local.col.cellDataType = "STRING" />
+				</cfdefaultcase>
+			</cfswitch>
+
+			<!--- if custom formatting was supplied, load a new style object --->
+			<cfif structKeyExists(arguments.formats, Local.col.name)>
+				<cfset Local.formatProp = duplicate(arguments.formats[ Local.col.name ]) />
+
+				<!--- apply the default format (if none was provided) --->
+				<cfif not structKeyExists(Local.formatProp, "dataFormat") and structKeyExists(Local.col, cellFormat)>
+					<cfset Local.formatProp.dataFormat = variables.defaultFormats[ Local.col.typeName ] />
+				</cfif>
+
+				<!--- generate the cell style --->
+				<cfset Local.col.customCellStyle = buildCellStyle(format=Local.formatProp) />
+			</cfif>
+
+		</cfloop>
+
+		<cfreturn Local.metadata />
+	</cffunction>
+	
 	<!--- COMMON VALIDATION FUNCTIONS --->
 	<!--- TODO: Incorporate into other existing functions --->
 	<cffunction name="validateSheetIndex" access="private" output="false" returntype="void"

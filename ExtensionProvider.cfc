@@ -31,7 +31,7 @@ component displayname="extension provider" output="false" {
 		QuerySetCell(apps,'support','https://github.com/andyj/RailoExtensionProvider/issues');
 		QuerySetCell(apps,'documentation','http://code.google.com/p/cfpoi/w/list');
 		QuerySetCell(apps,'created',CreateDate(2009,2,24));
-		QuerySetCell(apps,'version',"v31");
+		QuerySetCell(apps,'version',"v32");
 		QuerySetCell(apps,'category',"Application");
 		QuerySetCell(apps,'download','#instance.thisAddress#/cfpoi.zip');
 		//QuerySetCell(apps,'download','https://github.com/andyj/RailoExtensionProvider/blob/master/cfpoi.zip');
