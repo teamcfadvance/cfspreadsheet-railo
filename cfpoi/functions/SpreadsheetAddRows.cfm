@@ -5,11 +5,13 @@
 	<cfargument name="column" type="numeric" required="false" />
 	<cfargument name="insert" type="boolean" default="true" />
 	<cfargument name="formats" type="struct" required="false" />
+	<cfargument name="autoSizeColumns" type="boolean" default="true" />
 	
 	<cfset var args = StructNew() />
 
 	<cfset args.data   = arguments.data />
 	<cfset args.insert = arguments.insert />
+	<cfset args.autoSizeColumns = arguments.autoSizeColumns />
 	
 	<cfif StructKeyExists(arguments, "row")>
 		<cfset args.row = arguments.row />

@@ -809,16 +809,112 @@
 		</cfif>
 
 	
-		<!--- TODO: treating all data as strings; need to support data types? --->
+		<!--- TODO: Move to setCellValue --->
 		<cfset Local.cellNum = arguments.startColumn - 1 />  
+		<cfset Local.dateUtil = loadPOI("org.apache.poi.ss.usermodel.DateUtil") />
+		
 		<cfloop list="#arguments.data#" index="Local.cellValue" delimiters="#arguments.delimiter#">
+			<cfset Local.oldWidth = getActiveSheet().getColumnWidth( Local.cellNum ) />
 			<cfset Local.cell = createCell( Local.theRow, Local.cellNum ) />
-			<cfset Local.cell.setCellValue( JavaCast("string", Local.cellValue) ) />
+			<cfset Local.isDateColumn  = false />
+			<cfset Local.dateMask  = "" />
+<!---			
+			<cftry>
+			--->
+				<!--- NUMERIC --->
+				<!--- skip numeric strings with leading zeroes. treat those as text --->
+				<cfif IsNumeric( Local.cellValue ) and NOT reFind("^0[\d]+", trim(Local.cellValue)) >
+					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_NUMERIC ) />
+					<cfset Local.cell.setCellValue( javacast("double", Local.cellValue ) ) />
+
+				<!--- DATE --->
+				<cfelseif IsDate( Local.cellValue)>
+					<cfset Local.cellFormat = getDateTimeValueFormat( Local.cellValue ) />
+					<cfset Local.cell.setCellStyle( buildCellStyle({dataFormat=Local.cellFormat }) ) />
+					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_NUMERIC ) />
+					
+					<!--- Excel's uses a different epoch than CF (1900-01-01 versus 1899-12-30). "Time" 
+						only values will not display properly without special handling ---->
+					<cfif Local.cellFormat eq variables.defaultFormats.TIME>
+						 <cfset Local.cellValue = timeFormat(Local.cellValue, "HH:MM:SS")  />
+						 <cfset Local.cell.setCellValue( Local.dateUtil.convertTime(Local.cellValue) ) />
+					<cfelse>
+						<cfset Local.cell.setCellValue( parseDateTime(Local.cellValue) ) />
+					</cfif>
+					
+					<cfset Local.dateMask  = Local.cellFormat />
+					<cfset Local.isDateColumn  = true />
+
+				<!--- STRING --->
+				<cfelseif len(trim(Local.cellValue))>
+					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_STRING ) />
+					<cfset Local.cell.setCellValue( JavaCast("string", Local.cellValue) ) />
+
+				<!--- EMPTY  --->
+				<cfelse>
+					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_BLANK) />
+					<cfset Local.cell.setCellValue("") />
+				</cfif>
+<!---				
+				<cfcatch>
+					<!--- on error, default to string --->
+					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_STRING ) />
+					<cfset Local.cell.setCellValue( JavaCast("string", Local.cellValue) ) />
+				</cfcatch>
+			</cftry>
+--->
+			
+			<!--- automatically resize column. It would be more efficient to invoke
+				resize after all processing is finished, but obviously that is not possible with addRow. 
+			--->
+			<cfset autoSizeColumnFix( Local.cellNum, Local.isDateColumn, Local.dateMask ) />
+			
 			<cfset Local.cellNum = Local.cellNum + 1 />
 		</cfloop>
 
 	</cffunction>
+
+
+	<cffunction name="getDateTimeValueFormat" access="private" returntype="string"
+				hint="Returns the default date mask for the given value: DATE (only), TIME (only) or TIMESTAMP ">
+		<cfargument name="value" type="any" required="true" />
+		
+		<cfset Local.dateTime = parseDateTime(arguments.value) />
+		<cfset Local.dateOnly = createDate(year(Local.dateTime), month(Local.dateTime), day(Local.dateTime)) />
+			
+		<cfif dateCompare(arguments.value, Local.dateOnly, "s") eq 0>
+			<!--- DATE only --->
+			<cfreturn variables.defaultFormats.DATE />
+			
+		<cfelseif dateCompare("1899-12-30", Local.dateOnly, "d") eq 0>
+			<!--- TIME only --->
+			<cfreturn variables.defaultFormats.TIME />
+		<cfelse>
+			<!--- DATE and TIME --->
+			<cfreturn variables.defaultFormats.TIMESTAMP />
+		</cfif>
+
+	</cffunction>
 	
+
+	<!--- Workaround for an issue with autoSizeColumn(). It does not seem to handle 
+		date cells properly. It measures the length of the date "number", instead of 
+		the  visible date string ie mm//dd/yyyy. As a result columns are too narrow --->
+	<cffunction name="autoSizeColumnFix" access="private" returnType="void">
+	    <cfargument name="columnIndex" type="numeric" required="true" hint="Base-0 column index" />
+	    <cfargument name="isDateColumn" type="boolean" default="false" />
+		<cfargument name="dateMask" type="string" default="#variables.defaultFormats['TIMESTAMP']#" />	           			
+		
+		<cfif arguments.isDateColumn>
+			<!--- Add a few zeros for extra padding --->
+			<cfset Local.newWidth = estimateColumnWidth( arguments.dateMask &"00000") />
+			<cfset getActiveSheet().setColumnWidth( arguments.columnIndex, Local.newWidth ) />
+		<cfelse>
+			<cfset getActiveSheet().autoSizeColumn( javacast("int", arguments.columnIndex), true ) />
+		</cfif>
+	</cffunction>
+	
+
 	<cffunction name="addRows" access="public" output="false" returntype="void" 
 			hint="Adds rows to a sheet from a query object">
 		<cfargument name="data" type="query" required="true" />
@@ -869,7 +965,8 @@
 		<!--- get the column names and formatting information --->
 		<cfset Local.queryColumns = getQueryColumnFormats(arguments.data, arguments.formats) />
 		<cfset Local.dateUtil	  = loadPOI("org.apache.poi.ss.usermodel.DateUtil") />
-
+		<cfset Local.dateColumns  = {} />
+		
 		<cfloop query="arguments.data">
 			<!--- can't just call addRow() here since that function expects a comma-delimited 
 					list of data (probably not the greatest limitation ...) and the query 
@@ -889,14 +986,18 @@
 				<cfset Local.cell 	= createCell( Local.theRow, Local.cellNum, false ) />
 				<cfset Local.value 	= arguments.data[Local.column.name][arguments.data.currentRow] />
 				<cfset Local.forceDefaultStyle = false />
+				<cfset Local.column.index = Local.cellNum />
 
 				<!--- Cast the values to the correct type, so data formatting is properly applied --->
 				<cfif Local.column.cellDataType EQ "DOUBLE" AND IsNumeric(Local.value)>
 					<cfset Local.cell.setCellValue( JavaCast("double", val(Local.value) ) ) />
+
 				<cfelseif Local.column.cellDataType EQ "TIME" AND IsDate(Local.value)>
-					<cfset Local.value = timeFormat(parseDateTime(Local.value), "HH:MM:SS") />>					
+					<cfset Local.value = timeFormat(parseDateTime(Local.value), "HH:MM:SS") />				
 					<cfset Local.cell.setCellValue( Local.dateUtil.convertTime(Local.value) ) />
-						<cfset Local.forceDefaultStyle = true />
+					<cfset Local.forceDefaultStyle = true />
+					<cfset Local.dateColumns[ Local.column.name ] = { index=Local.cellNum, type=Local.column.cellDataType }  />
+					
 				<cfelseif Local.column.cellDataType EQ "DATE" AND IsDate(Local.value)>
 					<!--- If the cell is NOT already formatted for dates, apply the default format --->
 					<!--- brand new cells have a styleIndex == 0 --->
@@ -906,10 +1007,14 @@
 						<cfset Local.forceDefaultStyle = true />
 					</cfif>
 					<cfset Local.cell.setCellValue( parseDateTime(Local.value) ) />
+					<cfset Local.dateColumns[ Local.column.name ] = { index=Local.cellNum, type=Local.column.cellDataType }  />
+
 				<cfelseif Local.column.cellDataType EQ "BOOLEAN" AND IsBoolean(Local.value)>
 					<cfset Local.cell.setCellValue( JavaCast("boolean", Local.value ) ) />
+
 				<cfelseif IsSimpleValue(Local.value) AND NOT Len(Local.value)>
 					<cfset Local.cell.setCellType( Local.cell.CELL_TYPE_BLANK ) />
+
 				<cfelse>
 					<cfset Local.cell.setCellValue( JavaCast("string", Local.value ) ) />
 				</cfif>
@@ -917,10 +1022,11 @@
 				<!--- Replace the existing styles with custom formatting --->
 				<cfif structKeyExists(Local.column, "customCellStyle")>
 					<cfset Local.cell.setCellStyle( Local.column.customCellStyle ) />
+
 				<!--- Replace the existing styles with default formatting (for readability). The reason we cannot 
 					just update the cell's style is because they are shared. So modifying it may impact more than 
 					just this one cell. 
-					--->				
+				--->				
 				<cfelseif structKeyExists(Local.column, "defaultCellStyle") AND Local.forceDefaultStyle>
 					<cfset Local.cell.setCellStyle( Local.column.defaultCellStyle ) />
 				</cfif>
@@ -935,12 +1041,30 @@
 			exception if graphical environment is not available. If a graphical environment is not 
 			available, you must must run in headless mode ie java.awt.headless=true --->
 		<cfif arguments.autoSizeColumns and arguments.data.recordCount>
+			<!---
 			<cfset Local.startColumn = arguments.column - 1 />
 			<cfset Local.endColumn = Local.startColumn + arrayLen(Local.queryColumns) - 1 />
 			<cfloop from="#Local.startColumn#" to="#Local.endColumn#" index="Local.index">
-				resizing [#Local.index#]<br>
-				<cfset getActiveSheet().autoSizeColumn( javacast("int", Local.index) ) />
+				<cfset getActiveSheet().autoSizeColumn( javacast("int", Local.index), true ) />
 			</cfloop>	
+			--->
+			<cfloop array="#Local.queryColumns#" index="Local.column">
+				    <cflog file="POI" text="#Local.column.name# #local.column.index#:: #Local.column.cellDataType#">
+				<!--- auto resize NON-date/time columns ---->
+				<cfif NOT listFindNoCase("DATE,TIME", Local.column.cellDataType)>
+					<cfset getActiveSheet().autoSizeColumn( javacast("int", Local.column.index), true ) />
+				<cfelse>
+					<!--- Workaround: autoSizeColumn does not handle date columns correctly. As a
+					     result date columns are too narrow and cells display "######" ---->
+					<cfset Local.sampleValue = variables.defaultFormats[Local.column.cellDataType] />
+					<cfset Local.newWidth  = estimateColumnWidth( Local.sampleValue &"0000") />
+					<cfset Local.oldWidth  = getActiveSheet().getColumnWidth( Local.column.index) />
+				    <cflog file="POI" text="Date/time #Local.column.name# #local.column.index#:: #Local.oldWidth# #local.newWidth#">
+					<cfif Local.oldWidth lt Local.newWidth>
+						<cfset Local.oldWidth  = getActiveSheet().setColumnWidth( Local.column.index, Local.newWidth) />
+					</cfif>
+				</cfif>	
+			</cfloop>
 		</cfif>
 
 	</cffunction>
@@ -1096,6 +1220,20 @@
 	
 	
 	<!--- column functions --->
+	<cffunction name="autoSizeColumn" access="public" output="false" returntype="void"
+				hint="Adjusts the width of the specified column to fit the contents. For performance reasons, this should normally be called only once per column. ">
+		<cfargument name="column" type="numeric" required="false" />
+		<cfargument name="useMergedCells" type="boolean" default="false" hint="whether to use the contents of merged cells when calculating the width of the column" />
+
+		<cfif StructKeyExists(arguments, "column") and arguments.column lte 0>
+			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
+						message="Invalid Column Value" 
+						detail="The value for column must be greater than or equal to 1." />
+		</cfif>
+		
+		<cfset getActiveSheet().autoSizeColumn(arguments.column -1, arguments.useMergedCells ) />
+	</cffunction>
+	
 	<cffunction name="addColumn" access="public" output="false" returntype="void" 
 			hint="Adds a column and inserts the data provided into the new column.">
 		<cfargument name="data" type="string" required="true" />
@@ -2714,6 +2852,72 @@
 		</cfloop>
 	
 		<cfreturn Local.allRanges />		
+	</cffunction>
+
+	<!---
+		COLUMN WIDTH UTILITY FUNCTIONS
+	--->
+	<cffunction name="estimateColumnWidth" returntype="number" access="private"
+			hint="Estimates approximate column width based on cell value and default character width.">
+		<cfargument name="value" type="any" required="true" />
+	
+		<!--- 
+			"Excel bases its measurement of column widths on the number of digits (specifically, 
+			the number of zeros) in the column, using the Normal style font."
+				
+			This function approximates the column width using the number of characters and 
+			the default character width in the normal font. POI expresses the width in 1/256
+			of Excel's character unit.  The maximum size in POI is: (255 * 256)
+		--->	
+		<cfscript>
+			Local.defaultWidth = getDefaultCharWidth();
+			Local.numOfChars = len(arguments.value);
+			Local.width = ( Local.numOfChars * Local.defaultWidth +5) / Local.defaultWidth * 256;
+		    // Do not allow the size to exceed POI's maximum
+			return Min( Local.width, (255*256) );
+		</cfscript>
+	</cffunction>
+	
+	<cffunction name="getDefaultCharWidth" returntype="number" access="private"
+			hint="Estimates the default character width using Excel's 'Normal' font">
+		<cfscript>
+			// this is a compromise between hard coding a default value and the
+			// more complex method of using an AttributedString and TextLayout
+			Local.defaultFont = getWorkBook().getFontAt(0);
+			Local.style = getAWTFontStyle( Local.defaultFont );
+			Local.Font = loadPOI("java.awt.Font");
+			Local.javaFont = Local.Font.init( Local.defaultFont.getFontName()
+													, Local.style
+													, Local.defaultFont.getFontHeightInPoints() 
+												);
+			Local.fontContext = loadPOI("java.awt.font.FontRenderContext").init(javacast("null", ""), true, true);
+			Local.bounds = Local.javaFont.getStringBounds("0", Local.fontContext);
+			return Local.bounds.getWidth();
+		</cfscript>
+	</cffunction>
+	
+	<cffunction name="getAWTFontStyle" returntype="number" access="private"
+		hint="Transforms a POI Font ">
+		<cfargument name="poiFont" type="any" required="true" />
+		<cfscript>
+			Local.Font = loadPOI("java.awt.Font");
+			Local.isBold = arguments.poiFont.getBoldweight() == arguments.poiFont.BOLDWEIGHT_BOLD;
+	
+			if (Local.isBold && arguments.poiFont.getItalic()) {
+	           Local.style = BitOr( Local.Font.BOLD, Local.Font.ITALIC);
+			}
+			else if (Local.isBold) {
+	           Local.style = Local.Font.BOLD;
+			}
+			else if (arguments.poiFont.getItalic()) {
+	           Local.style  = Local.Font.ITALIC;
+			}
+			else {
+				Local.style = Local.Font.PLAIN;	
+			}
+			
+			return Local.style;
+		</cfscript>
 	</cffunction>
 
 </cfcomponent>
