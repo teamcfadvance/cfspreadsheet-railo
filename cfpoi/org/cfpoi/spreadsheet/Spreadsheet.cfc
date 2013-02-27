@@ -365,7 +365,7 @@
 		<cfargument name="imageType" type="string" required="false" />
 		<cfargument name="anchor" type="string" required="true" />
 		
-		<cfset var toolkit = CreateObject("java", "java.awt.Toolkit") />
+		<cfset var toolkit = loadPOI("java.awt.Toolkit") />
 		<!--- For some reason calling creationHelper.createClientAnchor() bombs with a 'could not instantiate object' 
 				error, so we'll create the anchor manually later. Just leaving this in here in case it's worth another 
 				look. --->
@@ -429,7 +429,7 @@
 		</cfswitch>
 		
 		<cfif StructKeyExists(arguments, "filepath") and StructKeyExists(arguments, "anchor")>
-			<cfset inputStream = CreateObject("java", "java.io.FileInputStream").init(JavaCast("string", arguments.filepath)) />
+			<cfset inputStream = loadPOI("java.io.FileInputStream").init(JavaCast("string", arguments.filepath)) />
 			<cfset bytes = ioUtils.toByteArray(inputStream) />
 			<cfset inputStream.close() />
 		<cfelse>
@@ -768,10 +768,11 @@
 	<cffunction name="addRow" access="public" output="false" returntype="void" 
 			hint="Adds a new row and inserts the data provided in the new row.">
 		<cfargument name="data" type="string" required="true" hint="Delimited list of data" />
-		<cfargument name="startRow" type="numeric" required="false" />
-		<cfargument name="startColumn" type="numeric" default="1" />
-		<cfargument name="insert" type="boolean" default="true" />
-		<cfargument name="delimiter" type="string" default="," />
+		<cfargument name="startRow" type="numeric" required="false" hint="Target row number" />
+		<cfargument name="startColumn" type="numeric" default="1" hint="Target column number" />
+		<cfargument name="insert" type="boolean" default="true" hint="If true, data is inserted as a new row. Otherwise, any existing data is overwritten "/>
+		<cfargument name="delimiter" type="string" default="," hint="Delimiter for the list of values" />
+		<cfargument name="handleEmbeddedCommas" type="boolean" default="true" hint="When true, values enclosed in single quotes are treated as a single element like in ACF. Only applies when the delimiter is a comma."  />
 		
 		<cfif StructKeyExists(arguments, "startRow") and arguments.startRow lte 0>
 			<cfthrow type="org.cfpoi.spreadsheet.Spreadsheet" 
@@ -808,12 +809,14 @@
 			<cfset Local.theRow	= createRow() />
 		</cfif>
 
-	
+		
+		<cfset Local.rowValues = parseRowData( arguments.data, arguments.delimiter, arguments.handleEmbeddedCommas ) />
+		  		
 		<!--- TODO: Move to setCellValue --->
 		<cfset Local.cellNum = arguments.startColumn - 1 />  
 		<cfset Local.dateUtil = loadPOI("org.apache.poi.ss.usermodel.DateUtil") />
 		
-		<cfloop list="#arguments.data#" index="Local.cellValue" delimiters="#arguments.delimiter#">
+		<cfloop array="#Local.rowValues#" index="Local.cellValue">
 			<cfset Local.oldWidth = getActiveSheet().getColumnWidth( Local.cellNum ) />
 			<cfset Local.cell = createCell( Local.theRow, Local.cellNum ) />
 			<cfset Local.isDateColumn  = false />
@@ -2854,6 +2857,93 @@
 		<cfreturn Local.allRanges />		
 	</cffunction>
 
+	<cffunction name="parseRowData" returntype="array" output="false" 
+			hint="Converts a list of values to an array">
+		<cfargument name="line" type="string" required="true" hint="List of values to parse" />
+		<cfargument name="delimiter" type="string" required="true" hint="List delimiter" />
+		<cfargument name="handleEmbeddedCommas" type="boolean" default="true" />
+	
+		<cfscript>
+			var elements = listToArray( arguments.line, arguments.delimiter );
+			var potentialQuotes = 0;
+			arguments.line = toString(arguments.line);
+			
+			if (arguments.delimiter eq "," && arguments.handleEmbeddedCommas) {
+				potentialQuotes = arguments.line.replaceAll("[^']", "").length();
+			}
+			
+			if (potentialQuotes <= 1) {
+			  	return elements;
+			}	
+
+			/*
+				For ACF compatibility, find any values enclosed in single 
+				quotes and treat them as a single element.
+			*/ 
+		  	var currValue = 0;
+		  	var nextValue = "";
+			var isEmbeddedValue = false;
+			var values = [];
+			var buffer = loadPOI("java.lang.StringBuilder").init();
+			var maxElem = arrayLen(elements);
+			
+			for (var i = 1; i <= maxElem; i++) {
+				  currValue = trim( elements[ i ] );
+				  nextValue = i < maxElem ? elements[ i + 1 ] : "";
+				  
+				  var isComplete = false;
+				  var hasLeadingQuote = currValue.startsWith("'");
+				  var hasTrailingQuote = currValue.endsWith("'");
+				  var isFinalElem = (i == maxElem);
+				  
+				  if (hasLeadingQuote) {
+					  isEmbeddedValue = true;
+				  }
+				  if (isEmbeddedValue && hasTrailingQuote) {
+					  isComplete = true;
+				  }
+				  
+				  // We are finished with this value if:  
+				  // * no quotes were found OR
+				  // * it is the final value OR
+				  // * the next value is embedded in quotes
+				  if (!isEmbeddedValue || isFinalElem || nextValue.startsWith("'")) {
+					  isComplete = true;
+				  }
+				  
+				  if (isEmbeddedValue || isComplete) {
+					  // if this a partial value, append the delimiter
+					  if (isEmbeddedValue && buffer.length() > 0) { 
+						  buffer.append(","); 
+					  }
+					  buffer.append( elements[i] );
+				  }
+	
+				  //WriteOutput("[#i#] value=#currValue# isEmbedded=#isEmbeddedValue# isComplete=#isComplete#"
+				  //	  &" (start/end #hasLeadingQuote#/#hasTrailingQuote#) <br>");
+				  
+				  if (isComplete) {
+					  var finalValue = buffer.toString();
+					  var startAt = finalValue.indexOf("'");
+					  var endAt = finalValue.lastIndexOf("'");
+	
+					  if (isEmbeddedValue && startAt >= 0 && endAt > startAt) {
+						  finalValue = finalValue.substring(startAt+1, endAt);
+					  }
+	
+					  values.add( finalValue );
+					  buffer.setLength(0);
+					  isEmbeddedValue = false;
+				  }	  
+				  
+			  }
+			  
+			  return values;
+		</cfscript>
+		
+	</cffunction>
+
+
 	<!---
 		COLUMN WIDTH UTILITY FUNCTIONS
 	--->
@@ -2919,5 +3009,6 @@
 			return Local.style;
 		</cfscript>
 	</cffunction>
+
 
 </cfcomponent>
