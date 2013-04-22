@@ -11,6 +11,8 @@
 
 		<cfscript>
 			if( NOT structKeyExists( server, "_poiLoader")){
+				local.version = val(listFirst(server.railo.version, "."));
+				
 				//create the loader
 				local.paths = arrayNew(1);
 				// This points to the jar we want to load. Could also load a directory of .class files
@@ -2980,8 +2982,11 @@
 													, Local.style
 													, Local.defaultFont.getFontHeightInPoints() 
 												);
-			Local.fontContext = loadPOI("java.awt.font.FontRenderContext").init(javacast("null", ""), true, true);
+
+			Local.transform = createObject("java", "java.awt.geom.AffineTransform");
+			Local.fontContext = createObject("java", "java.awt.font.FontRenderContext").init(Local.transform, true, true);
 			Local.bounds = Local.javaFont.getStringBounds("0", Local.fontContext);
+			
 			return Local.bounds.getWidth();
 		</cfscript>
 	</cffunction>
