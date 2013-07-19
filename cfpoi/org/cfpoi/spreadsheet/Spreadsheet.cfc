@@ -2866,7 +2866,7 @@
 		<cfargument name="handleEmbeddedCommas" type="boolean" default="true" />
 	
 		<cfscript>
-			var elements = listToArray( arguments.line, arguments.delimiter );
+			var elements = listToArray( arguments.line, arguments.delimiter, true );
 			var potentialQuotes = 0;
 			arguments.line = toString(arguments.line);
 			
