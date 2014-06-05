@@ -78,9 +78,16 @@
 				<cfset isXmlFormat   = listFindNoCase(variables.ooxmlExtensions, fileExtension) ? true : false />
 			</cfif>
 			
-			<cfif attributeExists("query") and not ( structKeyExists(caller, attributes.query) and IsQuery( caller[attributes.query] ) )>
-				<!--- not a valid query variable --->
-				<cfthrow type="application" message="Invalid 'Query' Attribute"  detail="The specified query [#attributes.query#] was not found or is not a query object" />
+			<cfif attributeExists("query")>
+                <cfset var loc = {}>
+                <cftry>
+                  <cfset loc.qry = getVariable("caller.#attributes.query#")>
+                <cfcatch type="any"/>
+                </cftry>
+                <cfif not (structKeyExists(loc, 'qry') and IsQuery(loc.qry))>
+				  <!--- not a valid query variable --->
+				  <cfthrow type="application" message="Invalid 'Query' Attribute"  detail="The specified query [#attributes.query#] was not found or is not a query object" />
+                </cfif>
 			</cfif>
 
 			<cfif attributeExists("columnFormats") and not attributeExists("query")>
@@ -88,20 +95,28 @@
 				<cfthrow type="application" message="Invalid Attribute Combination"  detail="The 'columnFormats' attribute can only be used in conjunction with a 'query' object" />
 			</cfif>
 
-			<cfif attributeExists("name") and not structKeyExists(caller, attributes.name)>
-				<!--- not a valid csv variable --->
-				<cfthrow type="application" message="Invalid 'Name' Attribute"  detail="The specified variable [#attributes.name#] was not found" />
-			</cfif>
+			<cfif attributeExists("name")>
+                <cfset var loc = {}>
+                <cftry>
+                  <cfset loc.name = getVariable("caller.#attributes.name#")>
+                <cfcatch type="any"/>
+                </cftry>        
+                <cfif not (structKeyExists(loc, 'name'))>
+				  <!--- not a valid csv variable --->
+				  <cfthrow type="application" message="Invalid 'Name' Attribute"  detail="The specified variable [#attributes.name#] was not found" />
+                </cfif>
+<!---			</cfif>
 			
-			<cfif attributeExists("name") and not ( IsSpreadSheetObject(caller[attributes.name]) or IsSimpleValue(caller[attributes.name]) )>
-				<cfthrow type="application" message="Invalid 'Name' Attribute"  detail="'Name' attribute [#attributes.name#] must contain a CSV string or a Spreadsheet object" />
-			</cfif>
+			<cfif attributeExists("name") and not ( IsSpreadSheetObject(caller[attributes.name]) or IsSimpleValue(caller[attributes.name]) )> --->
+                <cfif not(IsSpreadSheetObject(loc.name) or IsSimpleValue(loc.name))>
+				  <cfthrow type="application" message="Invalid 'Name' Attribute"  detail="'Name' attribute [#attributes.name#] must contain a CSV string or a Spreadsheet object" />
+                </cfif>
 			
-			<cfif attributeExists("name") and IsSimpleValue(caller[attributes.name]) and not attributeExists("format")>
-				<cfthrow type="application" message="Missing Attribute" detail="Missing required attribute 'format'." />
-			</cfif>
-		</cfif>
-
+			    <cfif IsSimpleValue(loc.name) and not attributeExists("format")>
+				  <cfthrow type="application" message="Missing Attribute" detail="Missing required attribute 'format'." />
+			    </cfif>
+		    </cfif>
+        </cfif>     
 
 		<cfswitch expression="#getAttribute('action')#">
 
@@ -128,17 +143,15 @@
 				<!--- Read file into a CSV/HTML string --->
 				<cfif attributeExists("format")>
 					<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init() />
-					<cfset caller[attributes.name] = spreadsheet.read(argumentcollection = attributes) />
+					<cfset setVariable("caller.#attributes.name#", spreadsheet.read(argumentcollection = attributes)) />
 					
 				<!--- Read file into a Query object --->
 				<cfelseif attributeExists("query")>
 					<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init() />
-					<cfset caller[attributes.query] = spreadsheet.read(argumentcollection = attributes) />
-
+                    <cfset setVariable("caller.#attributes.query#", spreadsheet.read(argumentcollection = attributes)) />
 				<!--- Read into Spreadsheet object --->
 				<cfelse>
-					<cfset caller[attributes.name] = SpreadSheetRead( attributes.src ) />
-					
+					<cfset setVariable("caller.#attributes.name#", SpreadSheetRead( attributes.src )) />				
 				</cfif>
 			</cfcase>
 
@@ -149,21 +162,26 @@
 				<cfset attributes.filepath = attributes.filename />
 				
 				<!--- Write SpreadSheet Object ---->
-				<cfif attributeExists("name") and IsSpreadSheetObject(caller[attributes.name])>
+                <cfset var loc = {}>
+                <cftry>
+                  <cfset loc.name = getVariable("caller.#attributes.name#")>
+                <cfcatch type="any"/>
+                </cftry>
+				<cfif attributeExists("name") and IsSpreadSheetObject(loc.name)>
 						<!--- remove "name" so write function does not mistake it for a CSV string --->
 						<cfset args = structCopy( attributes ) />
 						<cfset structDelete( args, "name") />
-						<cfset caller[attributes.name].write(argumentCollection = args) />
+						<cfset loc.name.write(argumentCollection = args) />
 						
 				<!--- Write CSV/delimited content --->
-				<cfelseif attributeExists("name") and IsSimpleValue(caller[attributes.name])>
-						<cfset attributes.name = caller[attributes.name] />
+				<cfelseif attributeExists("name") and IsSimpleValue(loc.name)>
+						<cfset attributes.name = loc.name />
 						<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init() />
 						<cfset spreadsheet.write(argumentCollection = attributes) />
 
 				<!--- Write Query content --->
 				<cfelseif attributeExists("query")>
-						<cfset attributes.query = caller[attributes.query] />
+						<cfset attributes.query = getVariable("caller.#attributes.query#") />
 						<cfset spreadsheet = CreateObject("component", "org.cfpoi.spreadsheet.Spreadsheet").init(useXmlFormat=isXmlFormat) />
 						<cfset spreadsheet.write(argumentcollection = attributes) />
 
@@ -189,7 +207,7 @@
 					<cfset attributes.name = caller[attributes.name]  />
 				<!--- Query content --->
 				<cfelseif attributeExists("query")>	
-					<cfset attributes.query = caller[attributes.query]  />
+					<cfset attributes.query = getVariable("caller.#attributes.query#")  />
 				</cfif>
 
 				<!--- If the workbook does not exist yet, this is just a simple 'write' --->
