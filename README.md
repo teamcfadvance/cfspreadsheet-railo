@@ -61,7 +61,7 @@ In this method, you will create your own temporary extension provider:
 
 ## Outdated Version Installation
 
-### (Outdated) Automatic "Spoofed Provider" Installation via Railo Admin GUI
+### (Outdated) Automatic Installation via Railo Admin GUI
 
 This provider URL is no longer maintained, and will supply an outdated version of &lt;cfspreadsheet&gt;:
 
