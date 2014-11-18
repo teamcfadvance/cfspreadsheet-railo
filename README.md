@@ -28,8 +28,8 @@ serverPath=/path/to/your/web/root/WEB-INF/railo # USE YOUR OWN PATH!
 rm -rf /tmp/cfspreadsheet
 # create temp dir
 mkdir -p /tmp/cfspreadsheet
-# download the zip
-cd /tmp/cfspreadsheet && curl -C - -O https://raw.githubusercontent.com/teamcfadvance/cfspreadsheet-railo/master/cfspreadsheetInstaller.zip
+# download the zip (change to https://raw.githubusercontent.com/teamcfadvance/cfspreadsheet-railo/master/cfspreadsheetInstaller.zip if pull request is accepted)
+cd /tmp/cfspreadsheet && curl -C - -O https://raw.githubusercontent.com/jamiejackson/cfspreadsheet-railo/installation_instructions_tweak/cfspreadsheetInstaller.zip
 # unzip the installer
 unzip -o cfspreadsheetInstaller.zip
 # unzip the cfpoi.zip, which, itself, contains another cfpoi.zip, so let's jump through a couple hoops
