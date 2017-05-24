@@ -1,3 +1,8 @@
+**NOTE: If you are looking for the Lucee version of this extension, please visit the following Repo: https://github.com/Leftbower/cfspreadsheet-lucee**
+
+**This repo is no longer maintained**
+
+----
 &lt;cfspreadsheet&gt; for Railo
 
 This is a fork of what used to be at http://code.google.com/p/cfpoi/ (no longer active) for Railo so a massive thank you must go out to Matt Woodward (www.mattwoodward.com / @mpwoodward) as he has done all the hard work for this project I am just forking it to make it workable with Railo as an extension.
